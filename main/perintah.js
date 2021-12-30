@@ -1,19 +1,19 @@
 process.on('message', async (pesan) => {
     log(0, pesan);
     const pengirim = pesan.pengirim;
-    const perintah = /^[\/°•π÷×¶∆£¢€¥®™+✓_=|~!?@#$%^&.©]/.test(pesan.teks)
-        ? pesan.teks.split(/\s+/)
-        : [];
-    if (perintah.length) {
-        const teks = pesan.teks.replace(new RegExp(`^${perintah[0]}\\s*`), '');
-        const prnth = perintah[0].slice(1).toLowerCase();
-        log(1, perintah, teks, prnth);
+    if (/^[\/°•π÷×¶∆£¢€¥®™+✓_=|~!?@#$%^&.©]/.test(pesan.teks)) {
+        const argumen = pesan.teks.replace(
+            new RegExp(`^${perintah[0]}\\s*`),
+            ''
+        );
+        const perintah = pesan.teks.split(/\s+/)[0].slice(1).toLowerCase();
+        log(1, argumen, perintah);
 
-        if (prnth === 'eval') {
+        if (perintah === 'eval') {
             log(3, 'eval');
             let hasil;
             try {
-                hasil = await eval(teks);
+                hasil = await eval(argumen);
             } catch (eror) {
                 hasil = eror.stack ?? eror;
             } finally {
