@@ -34,6 +34,9 @@ process.on('message', async (pesan) => {
 
         if (perintah === 'eval') {
             log(3, 'eval');
+            if (!cekDev(pengirim)) {
+                return balas({ teks: teks.id['permission/onlydev'] });
+            }
             if (!argumen) {
                 return balas({ teks: teks.id['command/eval/noargs'] });
             }
@@ -50,6 +53,14 @@ process.on('message', async (pesan) => {
         log(2);
     }
 });
+
+function cekDev(id) {
+    id = id.replace(/^[A-Z]{2}-/, '');
+    for (const devId of argv.devids.split(',')) {
+        if (id === devId) return true;
+    }
+    return false;
+}
 
 function log(kode, ...argumen2) {
     if (!argv.dev) return;

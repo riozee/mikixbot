@@ -8,5 +8,6 @@ Arguments:
 
 ```
 --dev
--tgtoken [TELEGRAM TOKEN]
+--tgtoken=[TELEGRAM TOKEN]
+--devids=[ID1],[ID2],[ID3]
 ```
