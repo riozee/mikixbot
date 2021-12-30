@@ -24,7 +24,7 @@ bot.launch().then(() => log(3));
 process.on('message', (pesan) => {
     log(4, pesan);
     const penerima = pesan.penerima.slice(3);
-    if (pesan.teks) {
+    if (pesan.teks ?? undefined) {
         bot.telegram
             .sendMessage(penerima, pesan.teks)
             .then((pesan) => log(5, pesan))
