@@ -16,7 +16,7 @@ for (const proses of [
 
 function mulaiProses(nama) {
     log(0, nama);
-    proses2[nama] = fork(`./main/${nama}.js`);
+    proses2[nama] = fork(`./main/subproses/${nama}.js`);
     proses2[nama].on('message', (pesan) => {
         log(1, nama, pesan);
         main(pesan);
