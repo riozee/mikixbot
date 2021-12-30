@@ -33,7 +33,6 @@ process.on('message', async (pesan) => {
         }
 
         if (perintah === 'eval') {
-            log(3, 'eval');
             if (!cekDev(pengirim)) {
                 return balas({ teks: teks.id['permission/onlydev'] });
             }
