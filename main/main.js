@@ -1,7 +1,7 @@
 const fork = require('child_process').fork;
-const fs = require('fs');
+const minimist = require('minimist');
 
-console.log(process.argv);
+const argv = minimist(process.argv.slice(2));
 
 const proses2 = {};
 
@@ -16,7 +16,7 @@ for (const proses of [
 
 function mulaiProses(nama) {
     log(0, nama);
-    proses2[nama] = fork(`./main/subproses/${nama}.js`);
+    proses2[nama] = fork(`./main/subproses/${nama}.js`, [JSON.stringify(argv)]);
     proses2[nama].on('message', (pesan) => {
         log(1, nama, pesan);
         main(pesan);
@@ -46,6 +46,7 @@ async function main(pesan) {
 }
 
 function log(kode, nama, ...argumen2) {
+    if (!argv.dev) return;
     return console.log(
         [
             `[PROSES UTAMA] memulai subproses ${nama}`, // 0

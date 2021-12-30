@@ -1,3 +1,5 @@
+const argv = JSON.parse(process.argv[2]);
+
 process.on('message', async (pesan) => {
     log(0, pesan);
     const pengirim = pesan.pengirim;
@@ -31,6 +33,7 @@ process.on('message', async (pesan) => {
 });
 
 function log(kode, ...argumen2) {
+    if (!argv.dev) return;
     return console.log(
         [
             `[PERINTAH] memproses teks`, // 0

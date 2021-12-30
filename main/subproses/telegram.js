@@ -1,8 +1,8 @@
 const { Telegraf } = require('telegraf');
-// const fs = require('fs');
-console.log(process.argv);
 
-const TOKEN = '1810524246:AAGI4TedIWBkTHlaKgBU_7v8BIpWXbg_wDc';
+const argv = JSON.parse(process.argv[2]);
+
+const TOKEN = argv.tgtoken;
 
 log(0);
 const bot = new Telegraf(TOKEN);
@@ -33,6 +33,7 @@ process.on('message', (pesan) => {
 });
 
 function log(kode, ...argumen2) {
+    if (!argv.dev) return;
     return console.log(
         [
             `[TELEGRAM] menginisialisasi bot telegram`, // 0
