@@ -12,7 +12,7 @@ bot.on('message', (konteks) => {
     const teks = konteks.message.text ?? konteks.message.caption ?? '';
 
     const pesan = {
-        pengirim: 'TG-' + konteks.chat.id,
+        dari: IDPengguna(konteks.chat.id),
         teks: teks,
     };
     log(2, pesan);
@@ -23,7 +23,7 @@ bot.launch().then(() => log(3));
 
 process.on('message', (pesan) => {
     log(4, pesan);
-    const penerima = pesan.penerima.slice(3);
+    const penerima = pesan.ke.slice(3);
     if (pesan.teks ?? undefined) {
         bot.telegram
             .sendMessage(penerima, pesan.teks)
@@ -31,6 +31,10 @@ process.on('message', (pesan) => {
             .catch((eror) => log(6, eror));
     }
 });
+
+function IDPengguna(ID) {
+    return 'TG-' + ID;
+}
 
 function log(kode, ...argumen2) {
     if (!argv.dev) return;

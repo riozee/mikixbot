@@ -6,7 +6,7 @@ const argv = minimist(process.argv.slice(2));
 const proses2 = {};
 
 for (const proses of [
-    // 'database',
+    'database',
     'perintah',
     'telegram',
     // 'whatsapp',
@@ -33,16 +33,28 @@ function mulaiProses(nama) {
 }
 
 async function main(pesan) {
-    if (pesan.pengirim) {
-        log(4, 'perintah', pesan);
-        proses2['perintah'].send(pesan);
+    if (pesan.dari) {
+        teruskanKe('perintah', pesan);
     }
-    if (pesan.penerima) {
-        if (pesan.penerima.startsWith('TG-')) {
-            log(4, 'telegram', pesan);
-            proses2['telegram'].send(pesan);
+    if (pesan.ke) {
+        if (pesan.ke.startsWith('TG-')) {
+            teruskanKe('telegram', pesan);
         }
     }
+    if (pesan.i) {
+        if (pesan.i.startsWith('TDB-')) {
+            teruskanKe('database', pesan);
+        } else {
+            if (pesan.i.endsWith('-PR')) {
+                teruskanKe('perintah', pesan);
+            }
+        }
+    }
+}
+
+function teruskanKe(subproses, pesan) {
+    log(4, subproses, pesan);
+    proses2[subproses].send(pesan);
 }
 
 function log(kode, nama, ...argumen2) {
