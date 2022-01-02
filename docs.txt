@@ -1,9 +1,0 @@
-Format pesan masuk: {
-    pengirim: '[TG|WA]-{ID}',
-    teks: string
-}
-
-Format pesan keluar: {
-    penerima: '[TG|WA]-{ID}',
-    teks: string
-}
