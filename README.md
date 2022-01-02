@@ -26,6 +26,15 @@ Cara program ini bekerja adalah dengan menggunakan komunikasi antarproses (IPC).
 
 &nbsp;
 
+## Kamus
+
+-   `PR = perintah.js`
+-   `DB = database.js`
+-   `WA = whatsapp.js`
+-   `TG = telegram.js`
+
+&nbsp;
+
 ## Run
 
 ```
@@ -39,6 +48,8 @@ Argumen-argumen:
 -   `--devids=[ID1],[ID2],[ID3]`
 -   `--mongodburi=[URI]` \*
 -   `--tgtoken=[TOKEN BOT TELEGRAM]` \*
+
+> `devids` adalah id milik developer, digunakan untuk mengakses perintah yang hanya dapat digunakan oleh developer.
 
 &nbsp;
 
@@ -86,33 +97,60 @@ Pesan lainnya
 
 &nbsp;
 
+## Komunikasi Antar-Proses
+
+Kirim pesan ke subproses lain menggunakan fungsi `kueriSubproses(subproses, argumen)`. Harap diperhatikan, subproses lain harus dapat memahami pesan yang dikirim. Untuk merespon, kirimkan kembali dengan `[id]` yang sama, namun huruf depannya diganti dengan huruf 'F'.
+
+Format kueri ke subproses lain:
+
+-   `i: T[id]` \*
+-   ...
+
+Format respon dari subproses:
+
+-   `i: F[id]` \*
+-   ...
+
+> Format `[id]` adalah `"[dari-subproses]#[rand(0,100)][timestamp]#[ke-subproses]"`.
+
+> `subproses` adalah 2 huruf singkatan dari nama file subproses darimana kueri tersebut dikirimkan. Misalnya jika kueri dikirimkan dari `perintah.js` ke `database.js`, `id`-nya adalah:\
+> DB#01216123456789#PR
+
+> Untuk mengirimkan kode agar dijalankan oleh subproses lain, masukkan kode ke dalam properti `eval` di dalam pesan.
+
+&nbsp;
+
 ## Database
 
-> Database yang digunakan adalah MongoDB Atlas.
+Database yang digunakan adalah MongoDB.
 
-Format kueri database:
+Sama seperti kueri ke subproses lainnya, kueri ke database bisa menggunakan fungsi `kueriSubproses()`.
 
--   `i: Q[idDB]` \*
--   `k: [koleksi]` \*
--   `_: Array<[metode, ...argumen]>` \*
+Format kueri ke database:
+
+-   `k: [koleksi]`
+-   `_: [kueri]`
 
 Format respon dari database:
 
--   `i: R[idDB]` \*
--   `h: [hasil kueri]`
+-   `h: [hasil]`
 -   `e: [eror]`
 
-> Format `[idDB]` adalah `"DB#[rand(0,9)][i++]#[subproses]"`.
-
-> `subproses` adalah 2 huruf singkatan dari nama file subproses darimana kueri tersebut dikirimkan. Misalnya jika kueri dikirimkan dari `perintah.js`, `idDB`-nya adalah:\
-> DB12-PR
-
-> Isi dari `_` adalah metode yang akan dipanggil pada `klien.db().collection(koleksi)`.
+> `kueri` adalah metode yang akan dipanggil pada `klien.db().collection(koleksi)`.
 >
-> > Contoh isi `_` untuk kueri berupa:\
+> > Contoh isi `kueri` untuk kueri berupa:\
 > > `find({_id: pengirim}).toArray()`\
 > > adalah:\
-> > `[["find", {_id: pengirim}], "toArray"]`
+> > `[["find", {_id: pengirim}], "toArray"]`\
+> >
+> > Contoh:
+> >
+> > ```
+> > kueriSubproses('DB', {
+> >     k: 'users',
+> >     _: [['find', {_id: id}], 'toArray']
+> > })
+> > ```
 
 &nbsp;
 

@@ -39,11 +39,23 @@ async function main(pesan) {
         }
     }
     if (pesan.i) {
-        if (pesan.i.startsWith('QDB#')) {
+        if (pesan.i.startsWith('TDB#')) {
             teruskanKe('database', pesan);
+        } else if (pesan.i.startsWith('TPR#')) {
+            teruskanKe('perintah', pesan);
+        } else if (pesan.i.startsWith('TTG#')) {
+            teruskanKe('telegram', pesan);
+        } else if (pesan.i.startsWith('TWA#')) {
+            teruskanKe('whatsapp', pesan);
         } else {
-            if (pesan.i.endsWith('#PR')) {
+            if (pesan.i.endsWith('#DB')) {
+                teruskanKe('database', pesan);
+            } else if (pesan.i.endsWith('#PR')) {
                 teruskanKe('perintah', pesan);
+            } else if (pesan.i.endsWith('#TG')) {
+                teruskanKe('telegram', pesan);
+            } else if (pesan.i.endsWith('#WA')) {
+                teruskanKe('whatsapp', pesan);
             }
         }
     }

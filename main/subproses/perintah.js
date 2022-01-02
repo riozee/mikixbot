@@ -6,13 +6,9 @@ const _ = require('lodash');
 
 const argv = JSON.parse(process.argv[2]);
 const $teks = {};
-const antrianDB = {};
-let _idDB = 0;
 
 for (const file of fs.readdirSync('./res/teks')) {
-    $teks[file.replace('.json', '')] = JSON.parse(
-        fs.readFileSync('./res/teks/' + file)
-    );
+    $teks[file.replace('.json', '')] = JSON.parse(fs.readFileSync('./res/teks/' + file));
     log(5, file);
 }
 
@@ -22,8 +18,6 @@ process.on('message', (pesan) => {
     log(0, pesan);
     if (pesan.dari) {
         return pesanMasuk(pesan);
-    } else if (pesan.i) {
-        return responDatabase(pesan);
     }
 });
 
@@ -33,10 +27,7 @@ async function pesanMasuk(pesan) {
     if (/^[\/°•π÷×¶∆£¢€¥®><™+✓_=|~!?@#$%^&.©]/.test(pesan.teks)) {
         const _perintah = pesan.teks.split(/\s+/)[0];
 
-        pesan.argumen = pesan.teks.replace(
-            new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`),
-            ''
-        );
+        pesan.argumen = pesan.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
         pesan.perintah = _perintah.slice(1).toLowerCase();
 
         log(1, pesan.argumen, pesan.perintah);
@@ -74,22 +65,17 @@ const Perintah = {
             return { teks: util.format(hasil) };
         }
     },
+    menu: (pesan) => {
+        return {
+            teks: Object.keys(Perintah)
+                .map((v) => '/' + v)
+                .join('\n'),
+        };
+    },
+    help: (pesan) => Perintah.menu(pesan),
 };
 
 //////////////////// FUNGSI PEMBANTU
-
-function responDatabase(pesan) {
-    log(8, pesan);
-    const idDB = pesan.i.slice(1);
-    for (const id in antrianDB) {
-        if (idDB === id) {
-            log(9);
-            antrianDB[id](pesan);
-            delete antrianDB[id];
-            return;
-        }
-    }
-}
 
 function cekDev(id) {
     id = id.replace(/^[A-Z]{2,3}#/, '');
@@ -99,20 +85,25 @@ function cekDev(id) {
     return false;
 }
 
-function db(koleksi, ...argumen) {
+function kueriSubproses(subproses, argumen) {
     return new Promise((resolve, reject) => {
-        const idDB = 'DB#' + _.random(0, 9).toString() + _idDB++ + '#PR';
-        antrianDB[idDB] = (hasil) => {
-            log(10, hasil);
-            hasil.e ? reject(hasil) : resolve(hasil);
+        const id = subproses + '#' + Math.floor(Math.random() * 100) + Date.now().toString() + '#PR';
+        function responKueri(hasil) {
+            if (hasil.i) {
+                if (hasil.i.slice(1) === id) {
+                    log(8, subproses, hasil);
+                    hasil.e ? reject(hasil) : resolve(hasil);
+                    process.removeListener('message', responKueri);
+                }
+            }
+        }
+        process.on('message', responKueri);
+        const pesan = {
+            i: 'T' + id,
+            ...argumen,
         };
-        const akhir = {
-            i: 'Q' + idDB,
-            k: koleksi,
-            _: argumen,
-        };
-        log(7, akhir);
-        process.send(akhir);
+        log(7, subproses, pesan);
+        process.send(pesan);
     });
 }
 
@@ -124,15 +115,21 @@ function log(kode, ...argumen2) {
             () => `[PERINTAH] terdapat perintah`, // 1
             () => `[PERINTAH] tidak ditemukan perintah`, // 2
             () => `[PERINTAH] mengeksekusi perintah "${argumen2.shift()}"`, // 3
-            () =>
-                `[PERINTAH] mengembalikan hasil dari perintah "${argumen2.shift()}"`, // 4
+            () => `[PERINTAH] mengembalikan hasil dari perintah "${argumen2.shift()}"`, // 4
             () => `[PERINTAH] memuat file translasi ${argumen2.shift()}`, // 5
             () => `[PERINTAH] perintah "${argumen2.shift()}" tidak ditemukan`, // 6
-            () => `[PERINTAH] mengirim kueri ke database`, // 7
-            () => `[PERINTAH] mendapat respon dari database`, // 8
-            () => `[PERINTAH] ditemukan id kueri database yang sama`, // 9
-            () => `[PERINTAH] me-resolve promise dari kueri`, // 10
+            () => `[PERINTAH] mengirim kueri ke "${argumen2.shift()}"`, // 7
+            () => `[PERINTAH] mendapat respon dari "${argumen2.shift()}"`, // 8
         ][kode](),
         ...argumen2
     );
 }
+
+process.on('message', async (pesan) => {
+    if (pesan.hasOwnProperty('eval')) {
+        process.send({
+            i: 'F' + pesan.i.slice(1),
+            result: require('util').format(await eval(pesan.eval)),
+        });
+    }
+});

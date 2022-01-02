@@ -40,9 +40,7 @@ function mulai() {
         try {
             const pesan = _pesan.messages[0];
             if (!pesan.message) return;
-            pesan.message = pesan.message.ephemeralMessage
-                ? pesan.message.ephemeralMessage.message
-                : pesan.message;
+            pesan.message = pesan.message.ephemeralMessage ? pesan.message.ephemeralMessage.message : pesan.message;
             console.log(pesan.message);
             //if (_pesan.type === 'notify') return;
             if (pesan.key?.fromMe) return;
@@ -92,10 +90,7 @@ function mulai() {
         if (connection === 'close') {
             log(9, lastDisconnect);
             bot = null;
-            if (
-                lastDisconnect.error?.output?.statusCode !==
-                DisconnectReason.loggedOut
-            ) {
+            if (lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut) {
                 return mulai();
             } else {
                 return;
@@ -111,11 +106,13 @@ mulai();
 
 process.on('message', (pesan) => {
     log(4, pesan);
-    const penerima = ID(pesan.ke);
-    if (typeof pesan.teks === 'string') {
-        bot.sendMessage(penerima, { text: pesan.teks })
-            .then((pesan) => log(5, pesan))
-            .catch((eror) => log(6, eror));
+    if (pesan.ke) {
+        const penerima = ID(pesan.ke);
+        if (typeof pesan.teks === 'string') {
+            bot.sendMessage(penerima, { text: pesan.teks })
+                .then((pesan) => log(5, pesan))
+                .catch((eror) => log(6, eror));
+        }
     }
 });
 
@@ -135,6 +132,28 @@ function ID(_ID) {
     }
 }
 
+function kueriSubproses(subproses, argumen) {
+    return new Promise((resolve, reject) => {
+        const id = subproses + '#' + Math.floor(Math.random() * 100) + Date.now().toString() + '#WA';
+        function responKueri(hasil) {
+            if (hasil.i) {
+                if (hasil.i.slice(1) === id) {
+                    log(11, subproses, hasil);
+                    hasil.e ? reject(hasil) : resolve(hasil);
+                    process.removeListener('message', responKueri);
+                }
+            }
+        }
+        process.on('message', responKueri);
+        const pesan = {
+            i: 'T' + id,
+            ...argumen,
+        };
+        log(10, subproses, pesan);
+        process.send(pesan);
+    });
+}
+
 function log(kode, ...argumen2) {
     if (!argv.dev) return;
     return console.log(
@@ -149,7 +168,18 @@ function log(kode, ...argumen2) {
             `[WHATSAPP] terjadi kesalahan saat menerima pesan`, // 7
             `[WHATSAPP] menghubungkan ke bot whatsapp`, // 8
             `[WHATSAPP] koneksi terputus dari bot whatsapp`, // 9
+            `[WHATSAPP] mengirim kueri ke`, // 10
+            `[WHATSAPP] mendapat respon dari`, // 11
         ][kode],
         ...argumen2
     );
 }
+
+process.on('message', async (pesan) => {
+    if (pesan.hasOwnProperty('eval')) {
+        process.send({
+            i: 'F' + pesan.i.slice(1),
+            result: require('util').format(await eval(pesan.eval)),
+        });
+    }
+});
