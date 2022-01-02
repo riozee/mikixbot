@@ -5,12 +5,7 @@ const argv = minimist(process.argv.slice(2));
 
 const proses2 = {};
 
-for (const proses of [
-    'database',
-    'perintah',
-    'telegram',
-    // 'whatsapp',
-]) {
+for (const proses of ['database', 'perintah', 'telegram', 'whatsapp']) {
     mulaiProses(proses);
 }
 
@@ -39,6 +34,8 @@ async function main(pesan) {
     if (pesan.ke) {
         if (pesan.ke.startsWith('TG#')) {
             teruskanKe('telegram', pesan);
+        } else if (pesan.ke.startsWith('WA#')) {
+            teruskanKe('whatsapp', pesan);
         }
     }
     if (pesan.i) {

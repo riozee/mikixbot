@@ -40,8 +40,8 @@ bot.launch().then(() => log(3));
 
 process.on('message', (pesan) => {
     log(4, pesan);
-    const penerima = pesan.ke.replace(/^TG#|#C$/, '');
-    if (pesan.teks ?? undefined) {
+    const penerima = ID(pesan.ke);
+    if (typeof pesan.teks === 'string') {
         bot.telegram
             .sendMessage(penerima, pesan.teks)
             .then((pesan) => log(5, pesan))
@@ -55,6 +55,10 @@ function IDChat(ID) {
 
 function IDPengguna(ID) {
     return 'TG#' + ID;
+}
+
+function ID(_ID) {
+    return _ID.replace(/^TG#|#C$/, '');
 }
 
 function log(kode, ...argumen2) {
