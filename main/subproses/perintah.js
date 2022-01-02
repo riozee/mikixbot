@@ -25,8 +25,9 @@ process.on('message', (pesan) => {
 
 function responDatabase(pesan) {
     log(8, pesan);
+    const idDB = pesan.i.slice(1);
     for (const id in antrianDB) {
-        if (pesan.i === id) {
+        if (idDB === id) {
             log(9);
             antrianDB[id](pesan);
             delete antrianDB[id];
@@ -36,7 +37,7 @@ function responDatabase(pesan) {
 }
 
 async function pesanMasuk(pesan) {
-    const pengirim = pesan.dari;
+    const pengirim = pesan.uid;
     const bahasa = 'id';
     if (/^[\/°•π÷×¶∆£¢€¥®><™+✓_=|~!?@#$%^&.©]/.test(pesan.teks)) {
         const _perintah = pesan.teks.split(/\s+/)[0];
@@ -50,7 +51,7 @@ async function pesanMasuk(pesan) {
 
         function balas(isi) {
             return process.send({
-                ke: pengirim,
+                ke: pesan.dari,
                 ...isi,
             });
         }
@@ -79,7 +80,7 @@ async function pesanMasuk(pesan) {
 }
 
 function cekDev(id) {
-    id = id.replace(/^[A-Z]{2}-/, '');
+    id = id.replace(/^[A-Z]{2,3}#/, '');
     for (const devId of argv.devids.split(',')) {
         if (id === devId) return true;
     }
@@ -88,13 +89,13 @@ function cekDev(id) {
 
 function db(koleksi, ...argumen) {
     return new Promise((resolve, reject) => {
-        const idDB = 'DB-' + _.random(0, 9).toString() + _idDB++ + '-PR';
+        const idDB = 'DB#' + _.random(0, 9).toString() + _idDB++ + '#PR';
         antrianDB[idDB] = (hasil) => {
             log(10, hasil);
             hasil.e ? reject(hasil) : resolve(hasil);
         };
         const akhir = {
-            i: 'T' + idDB,
+            i: 'Q' + idDB,
             k: koleksi,
             _: argumen,
         };

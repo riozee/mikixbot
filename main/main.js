@@ -37,15 +37,15 @@ async function main(pesan) {
         teruskanKe('perintah', pesan);
     }
     if (pesan.ke) {
-        if (pesan.ke.startsWith('TG-')) {
+        if (pesan.ke.startsWith('TG#')) {
             teruskanKe('telegram', pesan);
         }
     }
     if (pesan.i) {
-        if (pesan.i.startsWith('TDB-')) {
+        if (pesan.i.startsWith('QDB#')) {
             teruskanKe('database', pesan);
         } else {
-            if (pesan.i.endsWith('-PR')) {
+            if (pesan.i.endsWith('#PR')) {
                 teruskanKe('perintah', pesan);
             }
         }

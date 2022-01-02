@@ -47,7 +47,7 @@ process.on('message', async (pesan) => {
         eror = e.stack ?? e;
     }
     const akhir = {
-        i: pesan.i.slice(1),
+        i: 'R' + pesan.i.slice(1),
         h: hasil,
         e: eror,
     };

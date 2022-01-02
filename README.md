@@ -46,25 +46,29 @@ Argumen-argumen:
 
 > Semua pesan masuk dari platform yang berbeda-beda harus mengirimkan kembali pesan dengan format yang telah ditentukan agar dapat diproses secara sama oleh `perintah.js`. Begitu juga dengan semua bentuk komunikasi antar proses di dalam program ini. Semuanya harus saling memahami karena program ini dibuat dengan arsitektur proses yang berbeda-beda.
 
-Format pesan masuk:
+Format \<Pesan masuk\>:
 
 -   `dari: [ID Pengguna] | [ID Chat]` \*
--   \<Pesan\> \*
+-   `uid: [ID Pengguna]` \*
+-   `re: ...<Pesan masuk<tanpa 're'>>`
+-   `...\<Pesan\>` \*
 
-Format pesan keluar:
+> `re` adalah pesan yang dibalas.
+
+Format \<Pesan keluar\>:
 
 -   `ke: [ID Pengguna] | [ID Chat]` \*
--   \<Pesan\> \*
+-   `...\<Pesan\>` \*
 
-> Format `[ID Pengguna]` adalah `"[Platform]-[ID]"`.
+> Format `[ID Pengguna]` adalah `"[Platform]#[ID]"`.
 >
 > > Contoh `[ID Pengguna]` salah satu pengguna Telegram:\
-> > TG-12345678.
+> > TG#12345678.
 >
-> Format `[ID Chat]` adalah `"C-[Platform]-[ID]"`.
+> Format `[ID Chat]` adalah `"[Platform]#[ID]#C"`.
 >
 > > Contoh `[ID Chat]` salah satu grup di WhatsApp:\
-> > C-WA-6287765432109-1612345678.
+> > WA#6287765432109-1612345678#C.
 
 > `Platform` adalah 2 huruf singkatan dari nama platform, misalnya TG untuk Telegram atau WA untuk WhatsApp. Kecuali untuk web, yaitu menggunakan 3 huruf: WEB.
 
@@ -88,17 +92,17 @@ Pesan lainnya
 
 Format kueri database:
 
--   `i: T[idDB]` \*
+-   `i: Q[idDB]` \*
 -   `k: [koleksi]` \*
 -   `_: Array<[metode, ...argumen]>` \*
 
 Format respon dari database:
 
--   `i: [idDB]` \*
+-   `i: R[idDB]` \*
 -   `h: [hasil kueri]`
 -   `e: [eror]`
 
-> Format `[idDB]` adalah `"DB-[rand(0,9)][i++]-[subproses]"`.
+> Format `[idDB]` adalah `"DB#[rand(0,9)][i++]#[subproses]"`.
 
 > `subproses` adalah 2 huruf singkatan dari nama file subproses darimana kueri tersebut dikirimkan. Misalnya jika kueri dikirimkan dari `perintah.js`, `idDB`-nya adalah:\
 > DB12-PR

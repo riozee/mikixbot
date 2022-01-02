@@ -7,23 +7,40 @@ const TOKEN = argv.tgtoken;
 log(0);
 const bot = new Telegraf(TOKEN);
 
-bot.on('message', (konteks) => {
-    log(1, konteks);
-    const teks = konteks.message.text ?? konteks.message.caption ?? '';
+bot.on('new_chat_members', (konteks) => {});
 
+bot.on('left_chat_member', (konteks) => {});
+
+bot.on('callback_query', (konteks) => {});
+
+bot.on('message', (konteks) => {
+    log(1, konteks.message, konteks.from, konteks.chat);
+    const uid = konteks.from.id;
+    const cid = konteks.chat.id;
     const pesan = {
-        dari: IDPengguna(konteks.chat.id),
-        teks: teks,
+        dari: uid == cid ? IDPengguna(uid) : IDChat(cid),
+        uid: IDPengguna(uid),
     };
-    log(2, pesan);
-    process.send(pesan);
+
+    let iniPesan = false;
+
+    const teks = konteks.message.text ?? konteks.message.caption ?? '';
+    if (teks) {
+        iniPesan = true;
+        pesan.teks = teks;
+    }
+
+    if (iniPesan) {
+        log(2, pesan);
+        process.send(pesan);
+    }
 });
 
 bot.launch().then(() => log(3));
 
 process.on('message', (pesan) => {
     log(4, pesan);
-    const penerima = pesan.ke.slice(3);
+    const penerima = pesan.ke.replace(/^TG#|#C$/, '');
     if (pesan.teks ?? undefined) {
         bot.telegram
             .sendMessage(penerima, pesan.teks)
@@ -32,8 +49,12 @@ process.on('message', (pesan) => {
     }
 });
 
+function IDChat(ID) {
+    return 'TG#' + ID + '#C';
+}
+
 function IDPengguna(ID) {
-    return 'TG-' + ID;
+    return 'TG#' + ID;
 }
 
 function log(kode, ...argumen2) {
