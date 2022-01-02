@@ -2,17 +2,21 @@ const fs = require('fs');
 const util = require('util');
 const _ = require('lodash');
 
+//////////////////// VARS
+
 const argv = JSON.parse(process.argv[2]);
-const teks = {};
+const $teks = {};
 const antrianDB = {};
 let _idDB = 0;
 
 for (const file of fs.readdirSync('./res/teks')) {
-    teks[file.replace('.json', '')] = JSON.parse(
+    $teks[file.replace('.json', '')] = JSON.parse(
         fs.readFileSync('./res/teks/' + file)
     );
     log(5, file);
 }
+
+//////////////////// EVENT
 
 process.on('message', (pesan) => {
     log(0, pesan);
@@ -22,6 +26,57 @@ process.on('message', (pesan) => {
         return responDatabase(pesan);
     }
 });
+
+async function pesanMasuk(pesan) {
+    pesan.bahasa = 'id';
+
+    if (/^[\/°•π÷×¶∆£¢€¥®><™+✓_=|~!?@#$%^&.©]/.test(pesan.teks)) {
+        const _perintah = pesan.teks.split(/\s+/)[0];
+
+        pesan.argumen = pesan.teks.replace(
+            new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`),
+            ''
+        );
+        pesan.perintah = _perintah.slice(1).toLowerCase();
+
+        log(1, pesan.argumen, pesan.perintah);
+
+        if (pesan.perintah in Perintah) {
+            const hasil = await Perintah[pesan.perintah](pesan);
+            return process.send({
+                ke: pesan.dari,
+                ...hasil,
+            });
+        } else {
+            log(6, pesan.perintah);
+        }
+    } else {
+        log(2);
+    }
+}
+
+//////////////////// PERINTAH-PERINTAH
+
+const Perintah = {
+    eval: async (pesan) => {
+        if (!cekDev(pesan.uid)) {
+            return { teks: $teks[pesan.bahasa]['permission/onlydev'] };
+        }
+        if (!pesan.argumen) {
+            return { teks: $teks[pesan.bahasa]['command/eval/noargs'] };
+        }
+        let hasil;
+        try {
+            hasil = await eval(pesan.argumen);
+        } catch (eror) {
+            hasil = eror.stack ?? eror;
+        } finally {
+            return { teks: util.format(hasil) };
+        }
+    },
+};
+
+//////////////////// FUNGSI PEMBANTU
 
 function responDatabase(pesan) {
     log(8, pesan);
@@ -33,49 +88,6 @@ function responDatabase(pesan) {
             delete antrianDB[id];
             return;
         }
-    }
-}
-
-async function pesanMasuk(pesan) {
-    const pengirim = pesan.uid;
-    const bahasa = 'id';
-    if (/^[\/°•π÷×¶∆£¢€¥®><™+✓_=|~!?@#$%^&.©]/.test(pesan.teks)) {
-        const _perintah = pesan.teks.split(/\s+/)[0];
-        const argumen = pesan.teks.replace(
-            new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`),
-            ''
-        );
-        const perintah = _perintah.slice(1).toLowerCase();
-
-        log(1, argumen, perintah);
-
-        function balas(isi) {
-            return process.send({
-                ke: pesan.dari,
-                ...isi,
-            });
-        }
-
-        if (perintah === 'eval') {
-            if (!cekDev(pengirim)) {
-                return balas({ teks: teks[bahasa]['permission/onlydev'] });
-            }
-            if (!argumen) {
-                return balas({ teks: teks[bahasa]['command/eval/noargs'] });
-            }
-            let hasil;
-            try {
-                hasil = await eval(argumen);
-            } catch (eror) {
-                hasil = eror.stack ?? eror;
-            } finally {
-                return balas({ teks: util.format(hasil) });
-            }
-        } else {
-            log(6, perintah);
-        }
-    } else {
-        log(2);
     }
 }
 
