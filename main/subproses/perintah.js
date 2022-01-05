@@ -1,3 +1,6 @@
+const utils = require('../utils');
+const IPC = new utils.IPC('PR', process);
+
 const fs = require('fs');
 const util = require('util');
 const _ = require('lodash');
@@ -12,19 +15,15 @@ for (const file of fs.readdirSync('./res/teks')) {
     log(5, file);
 }
 
-//////////////////// EVENT
+const DBCache = { users: [], chats: [] };
 
-process.on('message', (pesan) => {
-    log(0, pesan);
-    if (pesan.dari) {
-        return pesanMasuk(pesan);
-    }
-});
+//////////////////// UTAMA
 
-async function pesanMasuk(pesan) {
+async function pesanMasuk($pesan) {
+    const pesan = $pesan._;
     pesan.bahasa = 'id';
 
-    if (/^[\/°•π÷×¶∆£¢€¥®><™+✓_=|~!?@#$%^&.©]/.test(pesan.teks)) {
+    if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test(pesan.teks)) {
         const _perintah = pesan.teks.split(/\s+/)[0];
 
         pesan.argumen = pesan.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
@@ -32,12 +31,21 @@ async function pesanMasuk(pesan) {
 
         log(1, pesan.argumen, pesan.perintah);
 
-        if (pesan.perintah in Perintah) {
-            const hasil = await Perintah[pesan.perintah](pesan);
-            return process.send({
-                ke: pesan.dari,
-                ...hasil,
-            });
+        if (Perintah.hasOwnProperty(pesan.perintah)) {
+            try {
+                const hasil = await Perintah[pesan.perintah](pesan);
+                return IPC.kirimSinyal($pesan.d, {
+                    penerima: pesan.pengirim,
+                    ...hasil,
+                });
+            } catch (e) {
+                log(9);
+                console.error(e);
+                return IPC.kirimSinyal($pesan.d, {
+                    penerima: pesan.pengirim,
+                    teks: $teks[pesan.bahasa]['system/error'],
+                });
+            }
         } else {
             log(6, pesan.perintah);
         }
@@ -85,27 +93,50 @@ function cekDev(id) {
     return false;
 }
 
-function kueriSubproses(subproses, argumen) {
-    return new Promise((resolve, reject) => {
-        const id = subproses + '#' + Math.floor(Math.random() * 100) + Date.now().toString() + '#PR';
-        function responKueri(hasil) {
-            if (hasil.i) {
-                if (hasil.i.slice(1) === id) {
-                    log(8, subproses, hasil);
-                    hasil.e ? reject(hasil) : resolve(hasil);
-                    process.removeListener('message', responKueri);
+function kueriDB(koleksi, ...aksi) {
+    return IPC.kirimKueri('DB', {
+        koleksi: koleksi,
+        aksi: aksi,
+    });
+}
+
+/* const DB = {
+    cariItemMenurutID: async (koleksi, ID) => {
+        let h;
+        if (DBCache[koleksi].length && (h = DBCache[koleksi].filter(v => v._id === ID)).length) {
+            return h[0];
+        } else {
+            const hasil = await IPC.kirimKueri('DB', {
+                koleksi: koleksi,
+                aksi: [['find', { _id: ID }], 'toArray'],
+            });
+            if (hasil.hasOwnProperty('_e')) {
+                return {_e: hasil._e }
+            } else {
+                if (hasil.h?.length) {
+                    DBCache[koleksi].push(hasil.h[0]);
+                    return hasil.h;
+                } else {
+                    return null;
                 }
             }
         }
-        process.on('message', responKueri);
-        const pesan = {
-            i: 'T' + id,
-            ...argumen,
-        };
-        log(7, subproses, pesan);
-        process.send(pesan);
-    });
-}
+    },
+    updateItemMenurutID: async (koleksi, ID) => {
+
+    }
+}; */
+
+////////////////////
+
+process.on('message', async (pesan) => {
+    log(0, pesan);
+    if (pesan.hasOwnProperty('_')) {
+        if (pesan._.hasOwnProperty('pengirim')) {
+            return await IPC.terimaSinyal(pesan, pesanMasuk);
+        }
+    }
+});
 
 function log(kode, ...argumen2) {
     if (!argv.dev) return;
@@ -120,16 +151,8 @@ function log(kode, ...argumen2) {
             () => `[PERINTAH] perintah "${argumen2.shift()}" tidak ditemukan`, // 6
             () => `[PERINTAH] mengirim kueri ke "${argumen2.shift()}"`, // 7
             () => `[PERINTAH] mendapat respon dari "${argumen2.shift()}"`, // 8
+            () => `[PERINTAH] terjadi kesalahan saat menjalankan perintah`, // 9
         ][kode](),
         ...argumen2
     );
 }
-
-process.on('message', async (pesan) => {
-    if (pesan.hasOwnProperty('eval')) {
-        process.send({
-            i: 'F' + pesan.i.slice(1),
-            result: require('util').format(await eval(pesan.eval)),
-        });
-    }
-});

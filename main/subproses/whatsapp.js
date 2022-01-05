@@ -1,3 +1,6 @@
+const utils = require('../utils');
+const IPC = new utils.IPC('WA', process);
+
 const argv = JSON.parse(process.argv[2]);
 
 log(0);
@@ -16,23 +19,22 @@ const fs = require('fs');
 
 const { state, saveState } = useSingleFileAuthState('./data/wa-session.json');
 
+function koneksikanKeWA() {
+    return makeWASocket({
+        logger: pino({ level: 'silent' }),
+        printQRInTerminal: true,
+        browser: ['Miki', 'Safari', '1.0.0'],
+        auth: state,
+    });
+}
+
 log(8);
-let bot = makeWASocket({
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
-    browser: ['Miki', 'Safari', '1.0.0'],
-    auth: state,
-});
+let bot = koneksikanKeWA();
 
 function mulai() {
     if (!bot) {
         log(8);
-        bot = makeWASocket({
-            logger: pino(),
-            printQRInTerminal: true,
-            browser: ['Miki', 'Safari', '1.0.0'],
-            auth: state,
-        });
+        bot = koneksikanKeWA();
     }
 
     bot.ev.on('messages.upsert', async (_pesan) => {
@@ -53,7 +55,7 @@ function mulai() {
 
             let iniPesan = false;
             const $pesan = {
-                dari: uid === cid ? IDPengguna(uid) : IDChat(cid),
+                pengirim: uid === cid ? IDPengguna(uid) : IDChat(cid),
                 uid: IDPengguna(uid),
             };
 
@@ -63,7 +65,7 @@ function mulai() {
                     (typeof isi === 'string' ? isi : '') ||
                     isi.caption ||
                     isi.text ||
-                    isi.singleSelectReply.selectedRowId ||
+                    isi.singleSelectReply?.selectedRowId ||
                     isi.selectedButtonId ||
                     '';
 
@@ -77,7 +79,7 @@ function mulai() {
 
             if (iniPesan) {
                 log(2, $pesan);
-                process.send($pesan);
+                return IPC.kirimSinyal('PR', $pesan);
             }
         } catch (eror) {
             log(7);
@@ -104,14 +106,25 @@ function mulai() {
 
 mulai();
 
-process.on('message', (pesan) => {
+async function proses(pesan) {
     log(4, pesan);
-    if (pesan.ke) {
-        const penerima = ID(pesan.ke);
-        if (typeof pesan.teks === 'string') {
-            bot.sendMessage(penerima, { text: pesan.teks })
-                .then((pesan) => log(5, pesan))
-                .catch((eror) => log(6, eror));
+    const penerima = ID(pesan._.penerima);
+    if (pesan._.hasOwnProperty('teks')) {
+        await bot.sendMessage(penerima, { text: String(pesan._.teks) });
+        return { s: true };
+    }
+}
+
+process.on('message', (pesan) => {
+    if (pesan.hasOwnProperty('_')) {
+        if (pesan.hasOwnProperty('i')) {
+            if (pesan._.hasOwnProperty('penerima')) {
+                IPC.terimaDanBalasKueri(pesan, (pesan) => proses(pesan));
+            } else if (pesan._.hasOwnProperty('_eval')) {
+                IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
+            }
+        } else if (pesan._.hasOwnProperty('penerima')) {
+            IPC.terimaSinyal(pesan, (pesan) => proses(pesan));
         }
     }
 });
@@ -174,12 +187,3 @@ function log(kode, ...argumen2) {
         ...argumen2
     );
 }
-
-process.on('message', async (pesan) => {
-    if (pesan.hasOwnProperty('eval')) {
-        process.send({
-            i: 'F' + pesan.i.slice(1),
-            result: require('util').format(await eval(pesan.eval)),
-        });
-    }
-});

@@ -1,4 +1,5 @@
 {
 	"command/eval/noargs": "/eval [javascript_code]\n\nEnter text to [javascript_code]",
-	"permission/onlydev": "This command can only be executed by the developer."
+	"permission/onlydev": "This command can only be executed by the developer.",
+	"system/error": "An error was occured."
 }

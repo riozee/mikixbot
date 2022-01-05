@@ -1,4 +1,5 @@
 {
 	"command/eval/noargs": "/eval [kode_javascript]\n\nMasukkan teks ke [kode_javascript]",
-	"permission/onlydev": "Perintah ini hanya dapat dijalankan oleh developer."
+	"permission/onlydev": "Perintah ini hanya dapat dijalankan oleh developer.",
+	"system/error": "Terjadi kesalahan."
 }

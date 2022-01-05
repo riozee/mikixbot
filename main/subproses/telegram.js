@@ -1,6 +1,9 @@
-const argv = JSON.parse(process.argv[2]);
+const utils = require('../utils');
+const IPC = new utils.IPC('TG', process);
 
 const { Telegraf } = require('telegraf');
+
+const argv = JSON.parse(process.argv[2]);
 
 const TOKEN = argv.tgtoken;
 
@@ -18,7 +21,7 @@ bot.on('message', (konteks) => {
     const uid = konteks.from.id;
     const cid = konteks.chat.id;
     const pesan = {
-        dari: uid == cid ? IDPengguna(uid) : IDChat(cid),
+        pengirim: uid == cid ? IDPengguna(uid) : IDChat(cid),
         uid: IDPengguna(uid),
     };
 
@@ -32,21 +35,31 @@ bot.on('message', (konteks) => {
 
     if (iniPesan) {
         log(2, pesan);
-        process.send(pesan);
+        return IPC.kirimSinyal('PR', pesan);
     }
 });
 
 bot.launch().then(() => log(3));
 
-process.on('message', (pesan) => {
+async function proses(pesan) {
     log(4, pesan);
-    if (pesan.ke) {
-        const penerima = ID(pesan.ke);
-        if (typeof pesan.teks === 'string') {
-            bot.telegram
-                .sendMessage(penerima, pesan.teks)
-                .then((pesan) => log(5, pesan))
-                .catch((eror) => log(6, eror));
+    const penerima = ID(pesan._.penerima);
+    if (pesan._.hasOwnProperty('teks')) {
+        await bot.telegram.sendMessage(penerima, String(pesan._.teks));
+        return { s: true };
+    }
+}
+
+process.on('message', (pesan) => {
+    if (pesan.hasOwnProperty('_')) {
+        if (pesan.hasOwnProperty('i')) {
+            if (pesan._.hasOwnProperty('penerima')) {
+                IPC.terimaDanBalasKueri(pesan, (pesan) => proses(pesan));
+            } else if (pesan._.hasOwnProperty('_eval')) {
+                IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
+            }
+        } else if (pesan._.hasOwnProperty('penerima')) {
+            IPC.terimaSinyal(pesan, (pesan) => proses(pesan));
         }
     }
 });
@@ -61,28 +74,6 @@ function IDPengguna(ID) {
 
 function ID(_ID) {
     return _ID.replace(/^TG#|#C$/, '');
-}
-
-function kueriSubproses(subproses, argumen) {
-    return new Promise((resolve, reject) => {
-        const id = subproses + '#' + Math.floor(Math.random() * 100) + Date.now().toString() + '#TG';
-        function responKueri(hasil) {
-            if (hasil.i) {
-                if (hasil.i.slice(1) === id) {
-                    log(8, subproses, hasil);
-                    hasil.e ? reject(hasil) : resolve(hasil);
-                    process.removeListener('message', responKueri);
-                }
-            }
-        }
-        process.on('message', responKueri);
-        const pesan = {
-            i: 'T' + id,
-            ...argumen,
-        };
-        log(7, subproses, pesan);
-        process.send(pesan);
-    });
 }
 
 function log(kode, ...argumen2) {
@@ -102,12 +93,3 @@ function log(kode, ...argumen2) {
         ...argumen2
     );
 }
-
-process.on('message', async (pesan) => {
-    if (pesan.hasOwnProperty('eval')) {
-        process.send({
-            i: 'F' + pesan.i.slice(1),
-            result: require('util').format(await eval(pesan.eval)),
-        });
-    }
-});

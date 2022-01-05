@@ -1,3 +1,6 @@
+const utils = require('../utils');
+const IPC = new utils.IPC('DB', process);
+
 const { MongoClient } = require('mongodb');
 
 const argv = JSON.parse(process.argv[2]);
@@ -5,79 +8,43 @@ const argv = JSON.parse(process.argv[2]);
 log(0);
 const klien = new MongoClient(argv.mongodburi);
 
-// const cache = {};
-
 klien.connect().then(async (hasilkoneksi) => {
     log(1);
-    // cache.users = await klien.db().collection('users').find({}).toArray();
-    // cache.chats = await klien.db().collection('chats').find({}).toArray();
-    // cache.system = await klien.db().collection('system').find({}).toArray();
 });
 
-process.on('message', async (pesan) => {
-    if (pesan.k && pesan._) {
-        let hasil,
-            eror,
-            awal = true;
-        try {
-            log(2, pesan);
-            const db = klien.db().collection(pesan.k);
-            for (const aksi of pesan._) {
-                const [metode, ...argumen] = Array.isArray(aksi) ? aksi : [aksi, []];
-                try {
-                    if (awal) {
-                        log(3, `db.${metode}(${argumen.join(', ')})`);
-                        hasil = await db[metode](...argumen);
-                        awal = false;
-                    } else {
-                        log(3, `hasil.${metode}(${argumen.join(', ')})`);
-                        hasil = await hasil[metode](...argumen);
-                    }
-                } catch (e) {
-                    log(4);
-                    console.error(e);
-                    eror = e.stack ?? e;
-                    break;
-                }
-            }
-        } catch (e) {
-            log(4);
-            console.error(e);
-            eror = e.stack ?? e;
+async function proses(pesan) {
+    let awal = true;
+    log(2, pesan);
+    const db = klien.db().collection(pesan._.koleksi);
+    for (const aksi of pesan._.aksi) {
+        const [metode, ...argumen] = Array.isArray(aksi) ? aksi : [aksi, []];
+        if (awal) {
+            hasil = await db[metode](...argumen);
+            awal = false;
+        } else {
+            hasil = await hasil[metode](...argumen);
         }
-        const akhir = {
-            i: 'F' + pesan.i.slice(1),
-            h: hasil,
-            e: eror,
-        };
-        log(5, akhir);
-        process.send(akhir);
     }
-});
+    const akhir = {
+        hasil: hasil,
+    };
+    log(5, akhir);
+    return akhir;
+}
 
 process.on('exit', klien.close);
 
-function kueriSubproses(subproses, argumen) {
-    return new Promise((resolve, reject) => {
-        const id = subproses + '#' + Math.floor(Math.random() * 100) + Date.now().toString() + '#DB';
-        function responKueri(hasil) {
-            if (hasil.i) {
-                if (hasil.i.slice(1) === id) {
-                    log(7, subproses, hasil);
-                    hasil.e ? reject(hasil) : resolve(hasil);
-                    process.removeListener('message', responKueri);
-                }
+process.on('message', (pesan) => {
+    if (pesan.hasOwnProperty('i')) {
+        if (pesan.hasOwnProperty('_')) {
+            if (pesan._.hasOwnProperty('_eval')) {
+                IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
+            } else {
+                IPC.terimaDanBalasKueri(pesan, (pesan) => proses(pesan));
             }
         }
-        process.on('message', responKueri);
-        const pesan = {
-            i: 'T' + id,
-            ...argumen,
-        };
-        log(6, subproses, pesan);
-        process.send(pesan);
-    });
-}
+    }
+});
 
 function log(kode, ...argumen2) {
     if (!argv.dev) return;
@@ -95,12 +62,3 @@ function log(kode, ...argumen2) {
         ...argumen2
     );
 }
-
-process.on('message', async (pesan) => {
-    if (pesan.hasOwnProperty('eval')) {
-        process.send({
-            i: 'F' + pesan.i.slice(1),
-            result: require('util').format(await eval(pesan.eval)),
-        });
-    }
-});

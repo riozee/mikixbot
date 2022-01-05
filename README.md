@@ -43,49 +43,49 @@ node ./main/main.js [...argumen]
 
 Argumen-argumen:
 
--   `--deflang=[KODE BAHASA DEFAULT]`
--   `--dev` (dev mode)
--   `--devids=[ID1],[ID2],[ID3]`
--   `--mongodburi=[URI]` \*
--   `--tgtoken=[TOKEN BOT TELEGRAM]` \*
-
-> `devids` adalah id milik developer, digunakan untuk mengakses perintah yang hanya dapat digunakan oleh developer.
+-   `--deflang=[LANGCODE]`\
+    Mengatur kode bahasa default pada pengguna yang belum mengatur bahasa.
+-   `--dev`\
+    Mengaktifkan mode pengembangan/debug.
+-   `--devids=[ID1],[ID2],[ID3]`\
+    ID pengembang dari masing-masing platform (seperti nomor telepon WA). Digunakan untuk mengidentifikasi dan menjalankan perintah khusus pengembang bot.
+-   `--mongodburi=[URI]` \*\
+    URI koneksi ke MongoDB Atlas (wajib).
+-   `--tgtoken=[TOKEN BOT TELEGRAM]` \*\
+    Token bot Telegram dari BotFather untuk mengaktifkan bot Telegram.
 
 &nbsp;
 
-## Pesan masuk
+## Komunikasi Antar-Proses
 
-> Semua pesan masuk dari platform yang berbeda-beda harus mengirimkan kembali pesan dengan format yang telah ditentukan agar dapat diproses secara sama oleh `perintah.js`. Begitu juga dengan semua bentuk komunikasi antar proses di dalam program ini. Semuanya harus saling memahami karena program ini dibuat dengan arsitektur proses yang berbeda-beda.
+Ada 2 mekanisme utama dalam komunikasi antar-proses.
 
-Format \<Pesan masuk\>:
+-   `sinyal` adalah ketika sebuah proses mengirim ke proses lain dengan tidak mengharapkan respon dari proses tersebut.
+-   `kueri` adalah ketika sebuah proses mengirim ke proses lain dan proses tersebut harus merespon kembali dengan membawa hasil dari kueri yang diberikan.
 
--   `dari: [ID Pengguna] | [ID Chat]` \*
--   `uid: [ID Pengguna]` \*
--   `re: ...<Pesan masuk<tanpa 're'>>`
--   `...\<Pesan\>` \*
+Anda dapat mengirim dan menerima pesan dengan menggunakan kelas `IPC` di modul `utils.js`.
 
-> `re` adalah pesan yang dibalas.
+Ciri-ciri dari sebuah pesan kueri yaitu terdapat key `i` (ID) di dalamnya. Ini bertujuan untuk membedakan pesan yang berupa respon dari proses yang diberikan kueri. Oleh karena itu, proses yang diberikan kueri harus mengirimkan kembali ID yang sama (namun dalam key `ir` [ID respon]). Jika tidak, proses yang mengirimkan kueri akan menunggu selamanya dan menambah beban pada memori!
 
-Format \<Pesan keluar\>:
+> Untuk mengirimkan kode untuk dieksekusi pada proses lainnya, masukkan kode ke dalam key `_eval` di dalam pesan yang akan di kirim (hanya bekerja pada pesan kueri).
 
--   `ke: [ID Pengguna] | [ID Chat]` \*
--   `...\<Pesan\>` \*
+&nbsp;
 
-> Format `[ID Pengguna]` adalah `"[Platform]#[ID]"`.
->
-> > Contoh `[ID Pengguna]` salah satu pengguna Telegram:\
-> > TG#12345678.
->
-> Format `[ID Chat]` adalah `"[Platform]#[ID]#C"`.
->
-> > Contoh `[ID Chat]` salah satu grup di WhatsApp:\
-> > WA#6287765432109-1612345678#C.
+## ID Pengguna dan ID Chat
 
-> `Platform` adalah 2 huruf singkatan dari nama platform, misalnya TG untuk Telegram atau WA untuk WhatsApp. Kecuali untuk web, yaitu menggunakan 3 huruf: WEB.
+Setiap pengguna dan chat dari semua platform akan diberikan ID dengan bentuk yang sama. Hal ini memungkinkan agar semua pengguna maupun chat dapat disimpan dalam satu database yang sama.
 
-> `ID` adalah nomor ID pengguna dari masing-masing platform, seperti nomor telepon di WhatsApp.
+Format ID Pengguna: `[platform]#[ID]`
 
-## \<Pesan\>
+Format ID Chat: `[platform]#[ID]#C`
+
+> Platform adalah singkatan 2 huruf dari nama platform (lihat #Kamus).
+
+> ID adalah ID dari masing-masing platform. Seperti nomor telepon di WA.
+
+&nbsp;
+
+## Format Pesan
 
 Pesan teks:
 
@@ -97,64 +97,36 @@ Pesan lainnya
 
 &nbsp;
 
-## Komunikasi Antar-Proses
-
-Kirim pesan ke subproses lain menggunakan fungsi `kueriSubproses(subproses, argumen)`. Harap diperhatikan, subproses lain harus dapat memahami pesan yang dikirim. Untuk merespon, kirimkan kembali dengan `[id]` yang sama, namun huruf depannya diganti dengan huruf 'F'.
-
-Format kueri ke subproses lain:
-
--   `i: T[id]` \*
--   ...
-
-Format respon dari subproses:
-
--   `i: F[id]` \*
--   ...
-
-> Format `[id]` adalah `"[dari-subproses]#[rand(0,100)][timestamp]#[ke-subproses]"`.
-
-> `subproses` adalah 2 huruf singkatan dari nama file subproses darimana kueri tersebut dikirimkan. Misalnya jika kueri dikirimkan dari `perintah.js` ke `database.js`, `id`-nya adalah:\
-> DB#01216123456789#PR
-
-> Untuk mengirimkan kode agar dijalankan oleh subproses lain, masukkan kode ke dalam properti `eval` di dalam pesan.
-
-&nbsp;
-
 ## Database
 
-Database yang digunakan adalah MongoDB.
+Database yang digunakan adalah MongoDB Atlas.
 
-Sama seperti kueri ke subproses lainnya, kueri ke database bisa menggunakan fungsi `kueriSubproses()`.
+Anda harus mengirimkan kueri ke `DB` (database) untuk mengakses database. Format pesan yang dikirimkan adalah:
 
-Format kueri ke database:
+-   `koleksi` = koleksi (collection) database yang akan diakses
+-   `aksi` = aksi (action) yang akan dijalankan pada database
 
--   `k: [koleksi]`
--   `_: [kueri]`
-
-Format respon dari database:
-
--   `h: [hasil]`
--   `e: [eror]`
-
-> `kueri` adalah metode yang akan dipanggil pada `klien.db().collection(koleksi)`.
+> &nbsp;\
+> Contoh untuk kueri:
 >
-> > Contoh isi `kueri` untuk kueri berupa:\
-> > `find({_id: pengirim}).toArray()`\
-> > adalah:\
-> > `[["find", {_id: pengirim}], "toArray"]`\
-> >
-> > Contoh:
-> >
-> > ```
-> > kueriSubproses('DB', {
-> >     k: 'users',
-> >     _: [['find', {_id: id}], 'toArray']
-> > })
-> > ```
+> ```
+> client.db().collection('users').find({_id: id}).toArray();
+> ```
+>
+> adalah:
+>
+> ```
+> IPC.kirimKueri('DB', {
+>    koleksi: 'users',
+>    aksi: [ ['find', {_id: id}], 'toArray' ]
+> });
+> ```
+>
+> &nbsp;
 
 &nbsp;
 
-## \<User\> (koleksi: users)
+## Format dokumen pada koleksi "users"
 
 -   `_id: [ID Pengguna]` \*
 -   `hit: [int]` (jumlah perintah/command dijalankan)
@@ -165,7 +137,7 @@ Format respon dari database:
 
 &nbsp;
 
-## \<Chat\> (koleksi: chats)
+## Format dokumen pada koleksi "chats"
 
 [TODO]
 

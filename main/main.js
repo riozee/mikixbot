@@ -1,3 +1,4 @@
+const { jalankanFn } = require('./utils');
 const fork = require('child_process').fork;
 const minimist = require('minimist');
 
@@ -28,34 +29,26 @@ function mulaiProses(nama) {
 }
 
 async function main(pesan) {
-    if (pesan.dari) {
-        teruskanKe('perintah', pesan);
-    }
-    if (pesan.ke) {
-        if (pesan.ke.startsWith('TG#')) {
+    if (pesan.hasOwnProperty('k')) {
+        if (pesan.k === 'PR') {
+            teruskanKe('perintah', pesan);
+        } else if (pesan.k === 'DB') {
+            teruskanKe('database', pesan);
+        } else if (pesan.k === 'TG') {
             teruskanKe('telegram', pesan);
-        } else if (pesan.ke.startsWith('WA#')) {
+        } else if (pesan.k === 'WA') {
             teruskanKe('whatsapp', pesan);
         }
-    }
-    if (pesan.i) {
-        if (pesan.i.startsWith('TDB#')) {
-            teruskanKe('database', pesan);
-        } else if (pesan.i.startsWith('TPR#')) {
-            teruskanKe('perintah', pesan);
-        } else if (pesan.i.startsWith('TTG#')) {
-            teruskanKe('telegram', pesan);
-        } else if (pesan.i.startsWith('TWA#')) {
-            teruskanKe('whatsapp', pesan);
-        } else {
-            if (pesan.i.endsWith('#DB')) {
-                teruskanKe('database', pesan);
-            } else if (pesan.i.endsWith('#PR')) {
-                teruskanKe('perintah', pesan);
-            } else if (pesan.i.endsWith('#TG')) {
-                teruskanKe('telegram', pesan);
-            } else if (pesan.i.endsWith('#WA')) {
-                teruskanKe('whatsapp', pesan);
+
+        ////////////////////////////////
+        else if (pesan.k === 'MAIN') {
+            if (pesan.hasOwnProperty('d') && pesan.d === 'PR') {
+                if (pesan.hasOwnProperty('_') && pesan._.hasOwnProperty('_eval')) {
+                    teruskanKe('perintah', {
+                        ir: pesan.i,
+                        _: await jalankanFn(() => eval(pesan._._eval)),
+                    });
+                }
             }
         }
     }
