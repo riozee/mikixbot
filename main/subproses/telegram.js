@@ -45,7 +45,13 @@ async function proses(pesan) {
     log(4, pesan);
     const penerima = ID(pesan._.penerima);
     if (pesan._.hasOwnProperty('teks')) {
-        await bot.telegram.sendMessage(penerima, String(pesan._.teks));
+        if (pesan._.teks.length > 4096) {
+            for (const teks of bagiString(pesan._.teks, 4096)) {
+                await bot.telegram.sendMessage(penerima, teks);
+            }
+        } else {
+            await bot.telegram.sendMessage(penerima, pesan._.teks);
+        }
         return { s: true };
     }
 }
@@ -74,6 +80,15 @@ function IDPengguna(ID) {
 
 function ID(_ID) {
     return _ID.replace(/^TG#|#C$/, '');
+}
+
+function bagiString(teks, besar) {
+    const jumlahBagian = Math.ceil(teks.length / besar);
+    const bagian = new Array(jumlahBagian);
+    for (let i = 0, o = 0; i < jumlahBagian; ++i, o += besar) {
+        bagian[i] = teks.substr(o, besar);
+    }
+    return bagian;
 }
 
 function log(kode, ...argumen2) {

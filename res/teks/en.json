@@ -1,5 +1,20 @@
 {
+	"command/about": "Miki Bot is a multi-platform chatbot that runs concurrently on several different platforms.\n\nCurrently Mickey bot runs on 2 platforms:\nTELEGRAM t.me/mikixbot\nWHATSAPP wa.me/14013580123\n\nThis bot is still in development stage. Bots are subject to change at any time without notice.\n\n© RiozeC (2021)",
 	"command/eval/noargs": "/eval [javascript_code]\n\nEnter text to [javascript_code]",
+	"command/kbbi/antonyms": "Antonyms",
+	"command/kbbi/combinations": "Combinations",
+	"command/kbbi/descendants": "Descendants",
+	"command/kbbi/error": "An error occurred or the word you were looking for was not found.",
+	"command/kbbi/meaning": "Meaning",
+	"command/kbbi/noargs": "/kbbi [word]\n\nEnter the searched word to [word]",
+	"command/kbbi/proverbs": "Proverbs",
+	"command/kbbi/related": "Related",
+	"command/kbbi/seealso": "See also",
+	"command/kbbi/synonyms": "Synonyms",
+	"command/kbbi/translations": "Translations",
+	"command/lowercase/noargs": "/lowercase [text]\n\nEnter text to [text]",
+	"command/reversetext/noargs": "/reversetext [text]\n\nEnter text to [text]",
+	"command/uppercase/noargs": "/uppercase [text]\n\nEnter text to [text]",
 	"permission/onlydev": "This command can only be executed by the developer.",
 	"system/error": "An error was occured."
 }
