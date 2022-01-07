@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@adiwajshing/baileys-md": "github:adiwajshing/baileys#multi-device",
+    "express": "^4.17.2",
     "lodash": "^4.17.21",
     "minimist": "^1.2.5",
     "mongodb": "^4.2.2",

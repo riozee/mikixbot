@@ -6,7 +6,7 @@ const argv = minimist(process.argv.slice(2));
 
 const proses2 = {};
 
-for (const proses of ['database', 'perintah', 'telegram', 'whatsapp']) {
+for (const proses of ['database', 'perintah', 'telegram', 'whatsapp', 'web']) {
     mulaiProses(proses);
 }
 

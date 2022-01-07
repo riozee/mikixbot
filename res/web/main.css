@@ -1,0 +1,61 @@
+.tema-terang {
+    --bg-color: 0, 194, 48;
+    --bg-bubbles-color: 255, 255, 255;
+    --primary-color: 255, 255, 255;
+    --secondary-color: 0, 0, 0;
+}
+
+.tema-gelap {
+    --bg-color: 16, 16, 16;
+    --bg-bubbles-color: 77, 212, 110;
+    --primary-color: 32, 32, 32;
+    --secondary-color: 255, 255, 255;
+}
+
+* {
+    margin: 0px;
+    padding: 0px;
+}
+
+body {
+    background-color: rgba(var(--bg-color), 1);
+}
+
+#bg-anim {
+    position: absolute;
+    display: block;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#main-bg {
+    position: absolute;
+    display: block;
+    width: 90%;
+    height: 90vh;
+    top: 5%;
+    left: 5%;
+    border-radius: 2%;
+    background-color: rgba(var(--primary-color), 0.4);
+    backdrop-filter: blur(2px);
+}
+
+#ganti-tema {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+}
+
+@keyframes bg-anim {
+    0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 0.2;
+        border-radius: 0;
+    }
+    100% {
+        transform: translateY(-1000px) rotate(720deg);
+        opacity: 0;
+        border-radius: 100%;
+    }
+}
