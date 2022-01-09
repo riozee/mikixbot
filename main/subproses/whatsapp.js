@@ -169,6 +169,7 @@ function log(kode, ...argumen2) {
             `[WHATSAPP] [ERROR] terjadi kesalahan saat menerima pesan`, // 7
             `[WHATSAPP] [LOG] menghubungkan ke bot`, // 8
             `[WHATSAPP] [ERROR] koneksi terputus dari bot`, // 9
+            `[WHATSAPP] [LOG] memulai ulang proses`, // 10
         ][kode],
         ...argumen2
     );
@@ -181,4 +182,11 @@ async function cekKoneksiInternet() {
     } catch {
         return false;
     }
+}
+
+if (argv.watch) {
+    require('fs').watch(__filename, () => {
+        log(10);
+        process.exit();
+    });
 }

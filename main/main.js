@@ -18,6 +18,7 @@ for (const proses of subproses) {
 
 function mulaiProses(nama) {
     log(0, nama);
+    logNoDev(0, nama);
     proses2[nama] = fork(`./main/subproses/${nama}.js`, [JSON.stringify(argv)]);
     proses2[nama].on('message', (pesan) => {
         log(1, nama, pesan);
@@ -25,10 +26,12 @@ function mulaiProses(nama) {
     });
     proses2[nama].on('error', (eror) => {
         log(2, nama);
+        logNoDev(1, nama);
         console.error(eror);
     });
     proses2[nama].on('exit', (kode) => {
         log(3, nama, kode);
+        logNoDev(2, nama, kode);
         delete proses2[nama];
         return mulaiProses(nama);
     });
@@ -74,6 +77,17 @@ function log(kode, nama, ...argumen2) {
             `[MAIN] [ERROR] terjadi eror di subproses ${nama}`, // 2
             `[MAIN] [ERROR] subproses ${nama} telah berhenti dengan kode:`, // 3
             `[MAIN] [LOG] mengirim pesan ke subproses ${nama}`, // 4
+        ][kode],
+        ...argumen2
+    );
+}
+
+function logNoDev(kode, nama, ...argumen2) {
+    return console.log(
+        [
+            `[MAIN] [LOG] memulai subproses ${nama}`, // 0
+            `[MAIN] [ERROR] terjadi eror di subproses ${nama}`, // 1
+            `[MAIN] [ERROR] subproses ${nama} telah berhenti dengan kode:`, // 2
         ][kode],
         ...argumen2
     );

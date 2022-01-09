@@ -109,7 +109,15 @@ function log(kode, ...argumen2) {
             `[TELEGRAM] [LOG] menerima pesan dari proses utama`, // 4
             `[TELEGRAM] [LOG] pesan terkirim`, // 5
             `[TELEGRAM] [ERROR] terjadi kesalahan saat mengirim pesan`, // 6
+            `[TELEGRAM] [LOG] memulai ulang proses`, // 7
         ][kode],
         ...argumen2
     );
+}
+
+if (argv.watch) {
+    require('fs').watch(__filename, () => {
+        log(7);
+        process.exit();
+    });
 }

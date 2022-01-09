@@ -49,6 +49,8 @@ Argumen-argumen:
     Mengatur kode bahasa default pada pengguna yang belum mengatur bahasa.
 -   `--dev`\
     Mengaktifkan mode pengembangan/debug.
+-   `--watch`\
+    Mengaktifkan mode muat ulang setelah file berubah.
 -   `--devids=[ID1],[ID2],[ID3]`\
     ID pengembang dari masing-masing platform (seperti nomor telepon WA). Digunakan untuk mengidentifikasi dan menjalankan perintah khusus pengembang bot.
 -   `--mongodburi=[URI]` \*\

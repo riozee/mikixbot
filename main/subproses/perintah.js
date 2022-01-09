@@ -5,6 +5,7 @@ const fs = require('fs');
 const util = require('util');
 const _ = require('lodash');
 const fetch = require('node-fetch');
+const chalk = require('chalk');
 
 //////////////////// VARS
 
@@ -13,12 +14,11 @@ const $teks = {};
 
 for (const file of fs.readdirSync('./res/teks')) {
     $teks[file.replace('.json', '')] = JSON.parse(fs.readFileSync('./res/teks/' + file));
-    log(5, file);
 }
 
 log(0, Object.keys($teks));
 
-const DBCache = { users: [], chats: [] };
+const cache = { colors: {} };
 
 //////////////////// UTAMA
 
@@ -34,6 +34,7 @@ async function pesanMasuk($pesan) {
         pesan.perintah = _perintah.slice(1).toLowerCase();
 
         log(2, pesan.teks);
+        logPesan($pesan.d, pesan);
 
         if (Perintah.hasOwnProperty(pesan.perintah)) {
             try {
@@ -42,14 +43,17 @@ async function pesanMasuk($pesan) {
                     ...(await Perintah[pesan.perintah](pesan)),
                 };
                 log(5, hasil);
+                logPesan($pesan.d, hasil, true);
                 return IPC.kirimSinyal($pesan.d, hasil);
             } catch (e) {
                 log(6, pesan.teks);
                 console.error(e);
-                return IPC.kirimSinyal($pesan.d, {
+                const hasil = {
                     penerima: pesan.pengirim,
                     teks: $teks[pesan.bahasa]['system/error'],
-                });
+                };
+                logPesan($pesan.d, hasil, true);
+                return IPC.kirimSinyal($pesan.d, hasil);
             }
         } else {
             log(4, pesan.perintah);
@@ -216,6 +220,28 @@ function kueriDB(koleksi, ...aksi) {
     });
 }
 
+function logPesan(d, pesan, bot) {
+    function getColor(id) {
+        if (cache.colors.hasOwnProperty(id)) {
+            return cache.colors[id];
+        } else {
+            return (cache.colors[id] = [_.random(0, 360), _.random(0, 75)]);
+        }
+    }
+    const id = [bot ? chalk.hsv(...getColor('bot'), 100)('bot') : chalk.hsv(...getColor(pesan.uid), 100)(pesan.uid)];
+    const chat = pesan.pengirim || pesan.penerima;
+    if (bot || pesan.uid !== chat) {
+        id.push(chalk.hsv(...getColor(chat), 100)(chat));
+    }
+    return console.log(
+        new Date().toLocaleDateString(),
+        new Date().toLocaleTimeString(),
+        chalk.cyan(`<${d.toUpperCase()}>`),
+        id.join(':'),
+        pesan.teks
+    );
+}
+
 ////////////////////
 
 process.on('message', async (pesan) => {
@@ -237,7 +263,15 @@ function log(kode, ...argumen2) {
             `[PERINTAH] [LOG] tidak ditemukan perintah:`, // 4
             `[PERINTAH] [LOG] mengirim pesan ke proses utama`, // 5
             `[PERINTAH] [ERROR] terjadi kesalahan saat menjalankan perintah:`, // 6
+            `[PERINTAH] [LOG] memulai ulang proses`, // 7
         ][kode],
         ...argumen2
     );
+}
+
+if (argv.watch) {
+    require('fs').watch(__filename, () => {
+        log(7);
+        process.exit();
+    });
 }

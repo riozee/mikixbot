@@ -37,7 +37,15 @@ function log(kode, ...argumen2) {
             `[WEB] [LOG] menginisialisasi`, // 0
             `[WEB] [LOG] mendengarkan port:`, // 1
             `[WEB] [LOG] mendapat GET request ke`, // 2
+            `[WEB] [LOG] memulai ulang proses`, // 3
         ][kode],
         ...argumen2
     );
+}
+
+if (argv.watch) {
+    require('fs').watch(__filename, () => {
+        log(3);
+        process.exit();
+    });
 }

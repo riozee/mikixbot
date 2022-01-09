@@ -20,8 +20,15 @@ function log(kode, ...argumen2) {
     if (!argv.dev) return;
     return console.log(
         [
-            `[TEMPLATE] ini hanyalah template untuk membuat file subproses baru.`, // 0
+            `[TEMPLATE] [LOG] ini hanyalah template untuk membuat file subproses baru.`, // 0
         ][kode],
         ...argumen2
     );
+}
+
+if (argv.dev) {
+    require('fs').watch(__filename, () => {
+        log(0);
+        process.exit();
+    });
 }

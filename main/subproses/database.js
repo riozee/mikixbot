@@ -60,7 +60,15 @@ function log(kode, ...argumen2) {
             `[DATABASE] [LOG] menjalankan aksi`, // 3
             `[DATABASE] [ERROR] terjadi error di database`, // 4
             `[DATABASE] [LOG] mengirim pesan ke proses utama`, // 5
+            `[DATABASE] [LOG] memulai ulang proses`, // 5
         ][kode],
         ...argumen2
     );
+}
+
+if (argv.watch) {
+    require('fs').watch(__filename, () => {
+        log(5);
+        process.exit();
+    });
 }
