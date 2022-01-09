@@ -7,10 +7,17 @@ const root = path.resolve('./res/web');
 app.use(express.static(root));
 app.use(express.json());
 
+app.set('views', path.resolve('./res/web/pages/'));
+app.set('view engine', 'ejs');
+
 app.listen(port, () => {
-    console.log(`Example app listening at ${port}`);
+    console.log(`[WEB] Listening at port ${port}`);
 });
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(root, 'main.html'));
+    res.render('home');
+});
+
+app.get('/commands', (req, res) => {
+    res.render('commands');
 });

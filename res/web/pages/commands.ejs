@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<head>
+    <%- include('../partials/head'); %>
+    <title>Perintah | Miki Bot</title>
+</head>
+<body>
+    <%- include('../partials/body') %>
+
+    <script>
+        var list = Array.from({ length: randomInt(100, 200) }, function () {
+                return (
+                    Array.from({ length: randomInt(3, 10) }, function () {
+                        return String.fromCharCode(97 + Math.floor(Math.random() * 26));
+                    }).join('') + (Math.random() > 0.5 ? ' [text]' : '')
+                );
+            });
+    </script>
+    
+    <div class="w-cari">
+        <input type="text" class="cari" placeholder="cari perintah..." oninput="update()">
+    </div>
+    <ul class="list"></ul>
+
+    <script>
+        (function () {
+            list.forEach(function (kata) {
+                $('<li>' + '/' + kata + '</li>').appendTo('.list');
+            });
+        })();
+        function update () {
+            $('.list').html('');
+            var value = $('.cari').val();
+            if (value) {
+                value = value.toLowerCase().replace(/[^a-z0-9]/g, '');
+                var filtered = list.filter(function (kata) {
+                    return new RegExp(value).test(kata.split(' ')[0]);
+                });
+                filtered.forEach(function (kata) {
+                    $('<li>' + '/' + kata + '</li>').appendTo('.list');
+                });
+            } else {
+                list.forEach(function (kata) {
+                    $('<li>' + '/' + kata + '</li>').appendTo('.list');
+                });
+            }
+        }
+    </script>
+</body>
