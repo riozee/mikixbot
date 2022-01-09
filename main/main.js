@@ -6,7 +6,13 @@ const argv = minimist(process.argv.slice(2));
 
 const proses2 = {};
 
-for (const proses of ['database', 'perintah', 'telegram', 'whatsapp', 'web']) {
+const subproses = ['database', 'perintah'];
+if (argv.s) {
+    for (const s of argv.s.split(',')) {
+        subproses.push(s);
+    }
+}
+for (const proses of subproses) {
     mulaiProses(proses);
 }
 
@@ -55,7 +61,7 @@ async function main(pesan) {
 }
 
 function teruskanKe(subproses, pesan) {
-    log(4, subproses, pesan);
+    log(4, subproses);
     proses2[subproses].send(pesan);
 }
 
@@ -63,11 +69,11 @@ function log(kode, nama, ...argumen2) {
     if (!argv.dev) return;
     return console.log(
         [
-            `[PROSES UTAMA] memulai subproses ${nama}`, // 0
-            `[PROSES UTAMA] menerima pesan dari subproses ${nama}`, // 1
-            `[PROSES UTAMA] terjadi eror di subproses ${nama}`, // 2
-            `[PROSES UTAMA] subproses ${nama} telah berhenti dengan kode:`, // 3
-            `[PROSES UTAMA] mengirim pesan ke subproses ${nama}`, // 4
+            `[MAIN] [LOG] memulai subproses ${nama}`, // 0
+            `[MAIN] [LOG] menerima pesan dari subproses ${nama}`, // 1
+            `[MAIN] [ERROR] terjadi eror di subproses ${nama}`, // 2
+            `[MAIN] [ERROR] subproses ${nama} telah berhenti dengan kode:`, // 3
+            `[MAIN] [LOG] mengirim pesan ke subproses ${nama}`, // 4
         ][kode],
         ...argumen2
     );

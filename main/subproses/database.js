@@ -8,22 +8,26 @@ const argv = JSON.parse(process.argv[2]);
 log(0);
 const klien = new MongoClient(argv.mongodburi);
 
-klien.connect().then(async (hasilkoneksi) => {
-    log(1);
-});
+klien.connect().then(() => log(1));
 
 async function proses(pesan) {
     let awal = true;
     log(2, pesan);
-    const db = klien.db().collection(pesan._.koleksi);
-    for (const aksi of pesan._.aksi) {
-        const [metode, ...argumen] = Array.isArray(aksi) ? aksi : [aksi, []];
-        if (awal) {
-            hasil = await db[metode](...argumen);
-            awal = false;
-        } else {
-            hasil = await hasil[metode](...argumen);
+    try {
+        const db = klien.db().collection(pesan._.koleksi);
+        for (const aksi of pesan._.aksi) {
+            const [metode, ...argumen] = Array.isArray(aksi) ? aksi : [aksi, []];
+            if (awal) {
+                hasil = await db[metode](...argumen);
+                awal = false;
+            } else {
+                hasil = await hasil[metode](...argumen);
+            }
         }
+    } catch (e) {
+        log(4);
+        console.error(e);
+        return { _e: String(e) };
     }
     const akhir = {
         hasil: hasil,
@@ -50,14 +54,12 @@ function log(kode, ...argumen2) {
     if (!argv.dev) return;
     return console.log(
         [
-            `[DATABASE] menginisialisasi database`, // 0
-            `[DATABASE] terhubung ke database`, // 1
-            `[DATABASE] menerima pesan dari proses utama`, // 2
-            `[DATABASE] menjalankan aksi`, // 3
-            `[DATABASE] terjadi error di database`, // 4
-            `[DATABASE] mengirim pesan ke proses utama`, // 5
-            `[DATABASE] mengirim kueri ke`, // 6
-            `[DATABASE] mendapat respon dari`, // 7
+            `[DATABASE] [LOG] menginisialisasi`, // 0
+            `[DATABASE] [LOG] terhubung ke MongoDB Atlas`, // 1
+            `[DATABASE] [LOG] menerima pesan dari proses utama`, // 2
+            `[DATABASE] [LOG] menjalankan aksi`, // 3
+            `[DATABASE] [ERROR] terjadi error di database`, // 4
+            `[DATABASE] [LOG] mengirim pesan ke proses utama`, // 5
         ][kode],
         ...argumen2
     );

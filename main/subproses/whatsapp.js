@@ -1,5 +1,6 @@
 const utils = require('../utils');
 const IPC = new utils.IPC('WA', process);
+const fetch = require('node-fetch');
 
 const argv = JSON.parse(process.argv[2]);
 
@@ -38,12 +39,10 @@ function mulai() {
     }
 
     bot.ev.on('messages.upsert', async (_pesan) => {
-        log(1);
         try {
             const pesan = _pesan.messages[0];
             if (!pesan.message) return;
             pesan.message = pesan.message.ephemeralMessage ? pesan.message.ephemeralMessage.message : pesan.message;
-            console.log(pesan.message);
             //if (_pesan.type === 'notify') return;
             if (pesan.key?.fromMe) return;
             if (pesan.key?.remoteJid === 'status@broadcast') return;
@@ -52,6 +51,8 @@ function mulai() {
             const cid = pesan.key?.remoteJid;
 
             if (!(uid && cid)) return;
+
+            log(1, pesan.message);
 
             let iniPesan = false;
             const $pesan = {
@@ -98,7 +99,9 @@ function mulai() {
                 return;
             }
         }
-        log(3, pembaruan);
+        if (connection && connection !== 'connecting') {
+            log(3, pembaruan);
+        }
     });
 
     bot.ev.on('creds.update', saveState);
@@ -109,9 +112,16 @@ mulai();
 async function proses(pesan) {
     log(4, pesan);
     const penerima = ID(pesan._.penerima);
-    if (pesan._.hasOwnProperty('teks')) {
-        await bot.sendMessage(penerima, { text: String(pesan._.teks) });
-        return { s: true };
+    try {
+        if (pesan._.hasOwnProperty('teks')) {
+            await bot.sendMessage(penerima, { text: String(pesan._.teks) });
+            log(5);
+            return { s: true };
+        }
+    } catch (e) {
+        log(6);
+        console.error(e);
+        return { s: false };
     }
 }
 
@@ -145,45 +155,30 @@ function ID(_ID) {
     }
 }
 
-function kueriSubproses(subproses, argumen) {
-    return new Promise((resolve, reject) => {
-        const id = subproses + '#' + Math.floor(Math.random() * 100) + Date.now().toString() + '#WA';
-        function responKueri(hasil) {
-            if (hasil.i) {
-                if (hasil.i.slice(1) === id) {
-                    log(11, subproses, hasil);
-                    hasil.e ? reject(hasil) : resolve(hasil);
-                    process.removeListener('message', responKueri);
-                }
-            }
-        }
-        process.on('message', responKueri);
-        const pesan = {
-            i: 'T' + id,
-            ...argumen,
-        };
-        log(10, subproses, pesan);
-        process.send(pesan);
-    });
-}
-
 function log(kode, ...argumen2) {
     if (!argv.dev) return;
     return console.log(
         [
-            `[WHATSAPP] menginisialisasi bot whatsapp`, // 0
-            `[WHATSAPP] menerima pesan`, // 1
-            `[WHATSAPP] mengirim pesan ke proses utama`, // 2
-            `[WHATSAPP] terhubung ke bot whatsapp`, // 3
-            `[WHATSAPP] menerima pesan dari proses utama`, // 4
-            `[WHATSAPP] pesan terkirim ke whatsapp`, // 5
-            `[WHATSAPP] terjadi kesalahan saat mengirim pesan`, // 6
-            `[WHATSAPP] terjadi kesalahan saat menerima pesan`, // 7
-            `[WHATSAPP] menghubungkan ke bot whatsapp`, // 8
-            `[WHATSAPP] koneksi terputus dari bot whatsapp`, // 9
-            `[WHATSAPP] mengirim kueri ke`, // 10
-            `[WHATSAPP] mendapat respon dari`, // 11
+            `[WHATSAPP] [LOG] menginisialisasi bot`, // 0
+            `[WHATSAPP] [LOG] menerima pesan`, // 1
+            `[WHATSAPP] [LOG] mengirim pesan ke proses utama`, // 2
+            `[WHATSAPP] [LOG] terhubung ke bot`, // 3
+            `[WHATSAPP] [LOG] menerima pesan dari proses utama`, // 4
+            `[WHATSAPP] [LOG] pesan terkirim`, // 5
+            `[WHATSAPP] [ERROR] terjadi kesalahan saat mengirim pesan`, // 6
+            `[WHATSAPP] [ERROR] terjadi kesalahan saat menerima pesan`, // 7
+            `[WHATSAPP] [LOG] menghubungkan ke bot`, // 8
+            `[WHATSAPP] [ERROR] koneksi terputus dari bot`, // 9
         ][kode],
         ...argumen2
     );
+}
+
+async function cekKoneksiInternet() {
+    try {
+        await fetch('https://www.google.com/');
+        return true;
+    } catch {
+        return false;
+    }
 }

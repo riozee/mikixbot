@@ -45,14 +45,21 @@ async function proses(pesan) {
     log(4, pesan);
     const penerima = ID(pesan._.penerima);
     if (pesan._.hasOwnProperty('teks')) {
-        if (pesan._.teks.length > 4096) {
-            for (const teks of bagiString(pesan._.teks, 4096)) {
-                await bot.telegram.sendMessage(penerima, teks);
+        try {
+            if (pesan._.teks.length > 4096) {
+                for (const teks of bagiString(pesan._.teks, 4096)) {
+                    await bot.telegram.sendMessage(penerima, teks);
+                }
+            } else {
+                await bot.telegram.sendMessage(penerima, pesan._.teks);
             }
-        } else {
-            await bot.telegram.sendMessage(penerima, pesan._.teks);
+            log(5);
+            return { s: true };
+        } catch (e) {
+            log(6);
+            console.error(e);
+            return { s: false };
         }
-        return { s: true };
     }
 }
 
@@ -95,15 +102,13 @@ function log(kode, ...argumen2) {
     if (!argv.dev) return;
     return console.log(
         [
-            `[TELEGRAM] menginisialisasi bot telegram`, // 0
-            `[TELEGRAM] menerima pesan`, // 1
-            `[TELEGRAM] mengirim pesan ke proses utama`, // 2
-            `[TELEGRAM] terhubung ke bot telegram`, // 3
-            `[TELEGRAM] menerima pesan dari proses utama`, // 4
-            `[TELEGRAM] pesan terkirim ke telegram`, // 5
-            `[TELEGRAM] terjadi kesalahan saat mengirim pesan`, // 6
-            `[TELEGRAM] mengirim kueri ke`, // 7
-            `[TELEGRAM] mendapat respon dari`, // 8
+            `[TELEGRAM] [LOG] menginisialisasi bot`, // 0
+            `[TELEGRAM] [LOG] menerima pesan`, // 1
+            `[TELEGRAM] [LOG] mengirim pesan ke proses utama`, // 2
+            `[TELEGRAM] [LOG] terhubung ke bot`, // 3
+            `[TELEGRAM] [LOG] menerima pesan dari proses utama`, // 4
+            `[TELEGRAM] [LOG] pesan terkirim`, // 5
+            `[TELEGRAM] [ERROR] terjadi kesalahan saat mengirim pesan`, // 6
         ][kode],
         ...argumen2
     );

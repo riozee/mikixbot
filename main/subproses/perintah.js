@@ -16,11 +16,14 @@ for (const file of fs.readdirSync('./res/teks')) {
     log(5, file);
 }
 
+log(0, Object.keys($teks));
+
 const DBCache = { users: [], chats: [] };
 
 //////////////////// UTAMA
 
 async function pesanMasuk($pesan) {
+    log(1, $pesan);
     const pesan = $pesan._;
     pesan.bahasa = 'id';
 
@@ -30,17 +33,18 @@ async function pesanMasuk($pesan) {
         pesan.argumen = pesan.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
         pesan.perintah = _perintah.slice(1).toLowerCase();
 
-        log(1, pesan.argumen, pesan.perintah);
+        log(2, pesan.teks);
 
         if (Perintah.hasOwnProperty(pesan.perintah)) {
             try {
-                const hasil = await Perintah[pesan.perintah](pesan);
-                return IPC.kirimSinyal($pesan.d, {
+                const hasil = {
                     penerima: pesan.pengirim,
-                    ...hasil,
-                });
+                    ...(await Perintah[pesan.perintah](pesan)),
+                };
+                log(5, hasil);
+                return IPC.kirimSinyal($pesan.d, hasil);
             } catch (e) {
-                log(9);
+                log(6, pesan.teks);
                 console.error(e);
                 return IPC.kirimSinyal($pesan.d, {
                     penerima: pesan.pengirim,
@@ -48,10 +52,10 @@ async function pesanMasuk($pesan) {
                 });
             }
         } else {
-            log(6, pesan.perintah);
+            log(4, pesan.perintah);
         }
     } else {
-        log(2);
+        log(3, pesan.teks);
     }
 }
 
@@ -212,37 +216,9 @@ function kueriDB(koleksi, ...aksi) {
     });
 }
 
-/* const DB = {
-    cariItemMenurutID: async (koleksi, ID) => {
-        let h;
-        if (DBCache[koleksi].length && (h = DBCache[koleksi].filter(v => v._id === ID)).length) {
-            return h[0];
-        } else {
-            const hasil = await IPC.kirimKueri('DB', {
-                koleksi: koleksi,
-                aksi: [['find', { _id: ID }], 'toArray'],
-            });
-            if (hasil.hasOwnProperty('_e')) {
-                return {_e: hasil._e }
-            } else {
-                if (hasil.h?.length) {
-                    DBCache[koleksi].push(hasil.h[0]);
-                    return hasil.h;
-                } else {
-                    return null;
-                }
-            }
-        }
-    },
-    updateItemMenurutID: async (koleksi, ID) => {
-
-    }
-}; */
-
 ////////////////////
 
 process.on('message', async (pesan) => {
-    log(0, pesan);
     if (pesan.hasOwnProperty('_')) {
         if (pesan._.hasOwnProperty('pengirim')) {
             return await IPC.terimaSinyal(pesan, pesanMasuk);
@@ -254,17 +230,14 @@ function log(kode, ...argumen2) {
     if (!argv.dev) return;
     return console.log(
         [
-            () => `[PERINTAH] memproses teks`, // 0
-            () => `[PERINTAH] terdapat perintah`, // 1
-            () => `[PERINTAH] tidak ditemukan perintah`, // 2
-            () => `[PERINTAH] mengeksekusi perintah "${argumen2.shift()}"`, // 3
-            () => `[PERINTAH] mengembalikan hasil dari perintah "${argumen2.shift()}"`, // 4
-            () => `[PERINTAH] memuat file translasi ${argumen2.shift()}`, // 5
-            () => `[PERINTAH] perintah "${argumen2.shift()}" tidak ditemukan`, // 6
-            () => `[PERINTAH] mengirim kueri ke "${argumen2.shift()}"`, // 7
-            () => `[PERINTAH] mendapat respon dari "${argumen2.shift()}"`, // 8
-            () => `[PERINTAH] terjadi kesalahan saat menjalankan perintah`, // 9
-        ][kode](),
+            `[PERINTAH] [LOG] memuat file translasi`, // 0
+            `[PERINTAH] [LOG] menerima pesan dari proses utama`, // 1
+            `[PERINTAH] [LOG] terdapat perintah, memproses teks:`, // 2
+            `[PERINTAH] [LOG] tidak terdapat perintah pada teks:`, // 3
+            `[PERINTAH] [LOG] tidak ditemukan perintah:`, // 4
+            `[PERINTAH] [LOG] mengirim pesan ke proses utama`, // 5
+            `[PERINTAH] [ERROR] terjadi kesalahan saat menjalankan perintah:`, // 6
+        ][kode],
         ...argumen2
     );
 }

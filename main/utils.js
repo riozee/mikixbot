@@ -70,3 +70,7 @@ exports.jalankanFn = async function (fn) {
         return { h: require('util').format(hasil) };
     }
 };
+
+exports.jeda = (milidetik) => {
+    return new Promise((res) => setTimeout(res, milidetik));
+};

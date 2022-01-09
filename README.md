@@ -43,6 +43,8 @@ node ./main/main.js [...argumen]
 
 Argumen-argumen:
 
+-   `--s=[subproses1],[subproses2],[subproses3]`\
+    Subproses yang akan dijalankan (`perintah.js` dan `database.js` dijalankan secara otomatis).
 -   `--deflang=[LANGCODE]`\
     Mengatur kode bahasa default pada pengguna yang belum mengatur bahasa.
 -   `--dev`\
@@ -50,7 +52,7 @@ Argumen-argumen:
 -   `--devids=[ID1],[ID2],[ID3]`\
     ID pengembang dari masing-masing platform (seperti nomor telepon WA). Digunakan untuk mengidentifikasi dan menjalankan perintah khusus pengembang bot.
 -   `--mongodburi=[URI]` \*\
-    URI koneksi ke MongoDB Atlas (wajib).
+    URI koneksi ke MongoDB Atlas.
 -   `--tgtoken=[TOKEN BOT TELEGRAM]` \*\
     Token bot Telegram dari BotFather untuk mengaktifkan bot Telegram.
 
