@@ -49,7 +49,7 @@ async function main(pesan) {
             teruskanKe('whatsapp', pesan);
         }
 
-        ////////////////////////////////
+        //////////////////////////////
         else if (pesan.k === 'MAIN') {
             if (pesan.hasOwnProperty('d') && pesan.d === 'PR') {
                 if (pesan.hasOwnProperty('_') && pesan._.hasOwnProperty('_eval')) {

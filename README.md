@@ -1,8 +1,18 @@
 # Miki bot
 
+<img src="mikibot.svg">
+
+Dokumentasi: [riozec.github.io/mikibot](https://riozec.github.io/mikibot)
+
+&nbsp;
+
 ## Deskripsi
 
 Program ini bertujuan untuk menggabungkan beberapa platform untuk chatbot, seperti Telegram, WhatsApp, atau bahkan web. Semua instansi bot di sini dapat berkomunikasi satu sama lain menggunakan protokol yang telah ditentukan.
+
+&nbsp;
+
+## Cara Kerja
 
 Cara program ini bekerja adalah dengan menggunakan komunikasi antarproses (IPC). Pertama-tama, `main.js` akan menjalankan semua file yang ada di folder `./main/subproses` (menggunakan `child_process.fork()`). Lalu subproses-subproses tadi akan berjalan sesuai dengan perannya masing-masing. Di sini, `main.js` hanya bertugas sebagai konfigurasi awal, penengah komunikasi antar subproses dan membangkitkan kembali subproses ketika terhenti karena eror.
 
@@ -32,6 +42,13 @@ Cara program ini bekerja adalah dengan menggunakan komunikasi antarproses (IPC).
 -   `DB = database.js`
 -   `WA = whatsapp.js`
 -   `TG = telegram.js`
+
+&nbsp;
+
+## Requirements
+
+-   nodejs
+-   ffmpeg
 
 &nbsp;
 
