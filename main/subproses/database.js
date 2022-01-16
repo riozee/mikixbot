@@ -9,9 +9,9 @@ const argv = JSON.parse(process.argv[2]);
 const cache = [];
 
 setInterval(() => {
-    log(6);
-    cache = [];
-}, 3600);
+    log(7);
+    while (cache.pop()) {}
+}, 3600000);
 
 log(0);
 const klien = new MongoClient(argv.mongodburi);
@@ -97,8 +97,8 @@ function log(kode, ...argumen2) {
             `[DATABASE] [LOG] menjalankan aksi`, // 3
             `[DATABASE] [ERROR] terjadi error di database`, // 4
             `[DATABASE] [LOG] mengirim pesan ke proses utama`, // 5
-            `[DATABASE] [LOG] memulai ulang proses`, // 5
-            `[DATABASE] [LOG] membersihkan cache`, // 6
+            `[DATABASE] [LOG] memulai ulang proses`, // 6
+            `[DATABASE] [LOG] membersihkan cache`, // 7
         ][kode],
         ...argumen2
     );

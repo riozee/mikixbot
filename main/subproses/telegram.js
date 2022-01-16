@@ -1,6 +1,8 @@
 const utils = require('../utils');
 const IPC = new utils.IPC('TG', process);
 
+const fs = require('fs/promises');
+const fetch = require('node-fetch');
 const { Telegraf } = require('telegraf');
 
 const argv = JSON.parse(process.argv[2]);
@@ -20,59 +22,92 @@ bot.on('message', (konteks) => {
     log(1, konteks.message, konteks.from, konteks.chat);
     const uid = konteks.from.id;
     const cid = konteks.chat.id;
-    const pesan = {
+
+    let pesan = {
         pengirim: uid == cid ? IDPengguna(uid) : IDChat(cid),
         uid: IDPengguna(uid),
+        mid: konteks.message.message_id,
     };
 
-    let iniPesan = false;
+    function muatPesan(message) {
+        const _ = {};
 
-    const teks = konteks.message.text ?? konteks.message.caption ?? '';
-    if (teks) {
-        iniPesan = true;
-        pesan.teks = teks;
+        const teks = message?.text || message?.caption;
+        if (teks) _.teks = teks;
+
+        if (message?.photo?.length) {
+            _.gambar = `${message.photo.reverse()[0].file_id}|jpg`;
+        }
+
+        return _;
     }
 
-    if (iniPesan) {
-        log(2, pesan);
-        return IPC.kirimSinyal('PR', pesan);
+    pesan = {
+        ...pesan,
+        ...muatPesan(konteks.message),
+    };
+
+    if (konteks.message.reply_to_message) {
+        pesan.q = muatPesan(konteks.message.reply_to_message);
     }
+
+    log(2, pesan);
+    return IPC.kirimSinyal('PR', pesan);
 });
 
 bot.launch().then(() => log(3));
 
-async function proses(pesan) {
+async function kirimPesan(pesan) {
     log(4, pesan);
     const penerima = ID(pesan._.penerima);
-    if (pesan._.hasOwnProperty('teks')) {
-        try {
-            if (pesan._.teks.length > 4096) {
-                for (const teks of bagiString(pesan._.teks, 4096)) {
-                    await bot.telegram.sendMessage(penerima, teks);
-                }
-            } else {
-                await bot.telegram.sendMessage(penerima, pesan._.teks);
-            }
-            log(5);
-            return { s: true };
-        } catch (e) {
-            log(6);
-            console.error(e);
-            return { s: false };
-        }
+    let opsi = {};
+    if (pesan._.hasOwnProperty('re')) {
+        opsi.reply_to_message_id = pesan._.mid;
     }
+
+    try {
+        const $pesan = pesan._;
+        if ($pesan.gambar) {
+            if ($pesan.teks) {
+                const teksAwal = $pesan.teks.length > 1096 ? $pesan.teks.slice(0, 1096) : $pesan.teks,
+                    teksSisa = $pesan.teks.length > 1096 ? $pesan.teks.slice(1096) : '';
+                await bot.telegram.sendPhoto(penerima, { source: $pesan.gambar }, { ...opsi, caption: teksAwal });
+                if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+            } else {
+                await bot.telegram.sendPhoto(penerima, { source: $pesan.gambar }, opsi);
+            }
+        } else {
+            await kirimPesanTeks(penerima, $pesan.teks, opsi);
+        }
+        log(5);
+        return { s: true };
+    } catch (e) {
+        log(6);
+        console.error(e);
+        return { s: false };
+    }
+}
+
+async function unduhMedia(mediaStr) {
+    const [file_id, eks] = mediaStr.split('|');
+    const tautan = (await bot.telegram.getFileLink(file_id)).href;
+    const f = await fetch(tautan);
+    const buffer = await f.buffer();
+    return utils.simpanFileSementara('./tmp/', buffer, eks);
 }
 
 process.on('message', (pesan) => {
     if (pesan.hasOwnProperty('_')) {
         if (pesan.hasOwnProperty('i')) {
             if (pesan._.hasOwnProperty('penerima')) {
-                IPC.terimaDanBalasKueri(pesan, (pesan) => proses(pesan));
+                IPC.terimaDanBalasKueri(pesan, (pesan) => kirimPesan(pesan));
             } else if (pesan._.hasOwnProperty('_eval')) {
                 IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
+            } else if (pesan._.hasOwnProperty('unduh')) {
+                IPC.terimaDanBalasKueri(pesan, async (pesan) => ({ file: await unduhMedia(pesan._.unduh) }));
             }
         } else if (pesan._.hasOwnProperty('penerima')) {
-            IPC.terimaSinyal(pesan, (pesan) => proses(pesan));
+            IPC.terimaSinyal(pesan, (pesan) => kirimPesan(pesan));
         }
     }
 });
@@ -87,6 +122,12 @@ function IDPengguna(ID) {
 
 function ID(_ID) {
     return _ID.replace(/^TG#|#C$/, '');
+}
+
+async function kirimPesanTeks(penerima, teks, opsi) {
+    for (const _teks of bagiString(teks, 4096)) {
+        await bot.telegram.sendMessage(penerima, _teks, opsi);
+    }
 }
 
 function bagiString(teks, besar) {

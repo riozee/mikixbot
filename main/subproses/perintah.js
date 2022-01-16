@@ -37,9 +37,14 @@ async function pesanMasuk($pesan) {
         logPesan($pesan.d, pesan);
 
         if (Perintah.hasOwnProperty(pesan.perintah)) {
+            const msg = {
+                penerima: pesan.pengirim,
+                mid: pesan.mid,
+                re: true
+            }
             try {
                 const hasil = {
-                    penerima: pesan.pengirim,
+                    ...msg,
                     ...(await Perintah[pesan.perintah](pesan)),
                 };
                 log(5, hasil);
@@ -49,7 +54,7 @@ async function pesanMasuk($pesan) {
                 log(6, pesan.teks);
                 console.error(e);
                 const hasil = {
-                    penerima: pesan.pengirim,
+                    ...msg,
                     teks: $teks[pesan.bahasa]['system/error'],
                 };
                 logPesan($pesan.d, hasil, true);

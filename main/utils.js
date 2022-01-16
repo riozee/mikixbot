@@ -1,3 +1,6 @@
+const fs = require('fs/promises');
+const path = require('path');
+
 exports.IPC = class IPC {
     constructor(subprosesIni, objekProcessGlobal) {
         this.subproses = subprosesIni;
@@ -73,4 +76,11 @@ exports.jalankanFn = async function (fn) {
 
 exports.jeda = (milidetik) => {
     return new Promise((res) => setTimeout(res, milidetik));
+};
+
+exports.simpanFileSementara = async (_path, buffer, eks) => {
+    const file = path.join(_path, `${Math.random().toString(36).slice(2)}.${eks}`);
+    await fs.writeFile(file, buffer);
+    setTimeout(() => fs.unlink(file), 60000 * 5);
+    return file;
 };

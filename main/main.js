@@ -1,6 +1,9 @@
 const { jalankanFn } = require('./utils');
 const fork = require('child_process').fork;
 const minimist = require('minimist');
+const fs = require('fs');
+
+if (!fs.existsSync('./tmp/')) fs.mkdirSync('./tmp/');
 
 const argv = minimist(process.argv.slice(2));
 

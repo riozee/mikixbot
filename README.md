@@ -108,18 +108,6 @@ Format ID Chat: `[platform]#[ID]#C`
 
 &nbsp;
 
-## Format Pesan
-
-Pesan teks:
-
--   `teks: [string]`
-
-Pesan lainnya
-
--   [TODO]
-
-&nbsp;
-
 ## Database
 
 Database yang digunakan adalah MongoDB Atlas. Semua data disimpan dalam satu koleksi (collection).

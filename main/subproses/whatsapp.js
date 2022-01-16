@@ -1,8 +1,11 @@
 const utils = require('../utils');
 const IPC = new utils.IPC('WA', process);
 const fetch = require('node-fetch');
+const fs = require('fs/promises');
 
 const argv = JSON.parse(process.argv[2]);
+
+const cache = [];
 
 log(0);
 const {
@@ -16,7 +19,6 @@ const {
     downloadContentFromMessage,
 } = require('@adiwajshing/baileys-md');
 const pino = require('pino');
-const fs = require('fs');
 
 const { state, saveState } = useSingleFileAuthState('./data/wa-session.json');
 
@@ -54,14 +56,15 @@ function mulai() {
 
             log(1, pesan.message);
 
-            let iniPesan = false;
-            const $pesan = {
+            let $pesan = {
                 pengirim: uid === cid ? IDPengguna(uid) : IDChat(cid),
                 uid: IDPengguna(uid),
+                mid: pesan.key.id,
             };
 
-            for (const tipe in pesan.message) {
-                const isi = pesan.message[tipe];
+            function muatPesan(tipe, isi) {
+                const _ = {};
+
                 const teks =
                     (typeof isi === 'string' ? isi : '') ||
                     isi.caption ||
@@ -69,19 +72,47 @@ function mulai() {
                     isi.singleSelectReply?.selectedRowId ||
                     isi.selectedButtonId ||
                     '';
+                if (teks) _.teks = teks;
 
-                if (teks) {
-                    iniPesan = true;
-                    $pesan.teks = teks;
+                if (tipe === 'imageMessage') {
+                    _.gambar = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|image|jpg`;
+                }
+
+                return _;
+            }
+
+            for (const tipe in pesan.message) {
+                const isi = pesan.message[tipe];
+                $pesan = {
+                    ...$pesan,
+                    ...muatPesan(tipe, isi),
+                };
+
+                if (isi.contextInfo?.quotedMessage) {
+                    for (const tipe in isi.contextInfo.quotedMessage) {
+                        const _isi = isi.contextInfo.quotedMessage[tipe];
+                        $pesan.q = muatPesan(tipe, _isi);
+
+                        break;
+                    }
                 }
 
                 break;
             }
 
-            if (iniPesan) {
-                log(2, $pesan);
-                return IPC.kirimSinyal('PR', $pesan);
-            }
+            log(2, $pesan);
+            cache.push(pesan);
+            setTimeout(
+                (id) => {
+                    cache.splice(
+                        cache.findIndex((_pesan) => _pesan.key.id === id),
+                        1
+                    );
+                },
+                10000,
+                `${pesan.key.id}`
+            );
+            return IPC.kirimSinyal('PR', $pesan);
         } catch (eror) {
             log(7);
             console.error(eror);
@@ -109,15 +140,24 @@ function mulai() {
 
 mulai();
 
-async function proses(pesan) {
+async function kirimPesan(pesan) {
     log(4, pesan);
     const penerima = ID(pesan._.penerima);
+    let opsi = {};
+    if (pesan._.hasOwnProperty('re')) {
+        opsi.quoted = cache.filter((_pesan) => _pesan.key.id == pesan._.mid)[0];
+    }
     try {
-        if (pesan._.hasOwnProperty('teks')) {
-            await bot.sendMessage(penerima, { text: String(pesan._.teks) });
-            log(5);
-            return { s: true };
+        const msg = {};
+        if (pesan._.gambar) {
+            msg.image = { url: pesan._.gambar };
+            msg.caption = pesan._.teks;
+        } else {
+            msg.text = pesan._.teks;
         }
+        await bot.sendMessage(penerima, msg, opsi);
+        log(5);
+        return { s: true };
     } catch (e) {
         log(6);
         console.error(e);
@@ -125,16 +165,29 @@ async function proses(pesan) {
     }
 }
 
+async function unduhMedia(mediaStr) {
+    let [mediaKey, directPath, url, type, ext] = mediaStr.split('|');
+    mediaKey = Uint8Array.from(mediaKey.split(','));
+    const stream = await downloadContentFromMessage({ mediaKey, directPath, url }, type);
+    let buffer = Buffer.from([]);
+    for await (const chunk of stream) {
+        buffer = Buffer.concat([buffer, chunk]);
+    }
+    return utils.simpanFileSementara('./tmp/', buffer, ext);
+}
+
 process.on('message', (pesan) => {
     if (pesan.hasOwnProperty('_')) {
         if (pesan.hasOwnProperty('i')) {
             if (pesan._.hasOwnProperty('penerima')) {
-                IPC.terimaDanBalasKueri(pesan, (pesan) => proses(pesan));
+                IPC.terimaDanBalasKueri(pesan, (pesan) => kirimPesan(pesan));
             } else if (pesan._.hasOwnProperty('_eval')) {
                 IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
+            } else if (pesan._.hasOwnProperty('unduh')) {
+                IPC.terimaDanBalasKueri(pesan, async (pesan) => ({ file: await unduhMedia(pesan._.unduh) }));
             }
         } else if (pesan._.hasOwnProperty('penerima')) {
-            IPC.terimaSinyal(pesan, (pesan) => proses(pesan));
+            IPC.terimaSinyal(pesan, (pesan) => kirimPesan(pesan));
         }
     }
 });
