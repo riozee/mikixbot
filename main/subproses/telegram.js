@@ -37,6 +37,12 @@ bot.on('message', (konteks) => {
 
         if (message?.photo?.length) {
             _.gambar = `${message.photo.reverse()[0].file_id}|jpg`;
+        } else if (message?.sticker) {
+            if (message.sticker.is_animated) {
+                _.stiker = `${message.sticker.thumb.file_id}|webp`;
+            } else {
+                _.stiker = `${message.sticker.file_id}|webp`;
+            }
         }
 
         return _;
@@ -76,6 +82,8 @@ async function kirimPesan(pesan) {
             } else {
                 await bot.telegram.sendPhoto(penerima, { source: $pesan.gambar }, opsi);
             }
+        } else if ($pesan.stiker) {
+            await bot.telegram.sendSticker(penerima, { source: $pesan.stiker }, opsi);
         } else {
             await kirimPesanTeks(penerima, $pesan.teks, opsi);
         }

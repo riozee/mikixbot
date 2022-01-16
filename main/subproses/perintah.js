@@ -10,13 +10,13 @@ const chalk = require('chalk');
 //////////////////// VARS
 
 const argv = JSON.parse(process.argv[2]);
-const $teks = {};
+const TEKS = {};
 
 for (const file of fs.readdirSync('./res/teks')) {
-    $teks[file.replace('.json', '')] = JSON.parse(fs.readFileSync('./res/teks/' + file));
+    TEKS[file.replace('.json', '')] = JSON.parse(fs.readFileSync('./res/teks/' + file));
 }
 
-log(0, Object.keys($teks));
+log(0, Object.keys(TEKS));
 
 const cache = { colors: {} };
 
@@ -32,6 +32,7 @@ async function pesanMasuk($pesan) {
 
         pesan.argumen = pesan.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
         pesan.perintah = _perintah.slice(1).toLowerCase();
+        pesan.arg = pesan.argumen || pesan.q?.teks;
 
         log(2, pesan.teks);
         logPesan($pesan.d, pesan);
@@ -40,8 +41,8 @@ async function pesanMasuk($pesan) {
             const msg = {
                 penerima: pesan.pengirim,
                 mid: pesan.mid,
-                re: true
-            }
+                re: true,
+            };
             try {
                 const hasil = {
                     ...msg,
@@ -55,7 +56,7 @@ async function pesanMasuk($pesan) {
                 console.error(e);
                 const hasil = {
                     ...msg,
-                    teks: $teks[pesan.bahasa]['system/error'],
+                    teks: TEKS[pesan.bahasa]['system/error'],
                 };
                 logPesan($pesan.d, hasil, true);
                 return IPC.kirimSinyal($pesan.d, hasil);
@@ -71,21 +72,21 @@ async function pesanMasuk($pesan) {
 //////////////////// PERINTAH-PERINTAH
 
 const Perintah = {
-    about: (pesan) => {
+    about: ($) => {
         return {
-            teks: $teks[pesan.bahasa]['command/about'],
+            teks: TEKS[$.bahasa]['command/about'],
         };
     },
-    eval: async (pesan) => {
-        if (!cekDev(pesan.uid)) {
-            return { teks: $teks[pesan.bahasa]['permission/onlydev'] };
+    eval: async ($) => {
+        if (!cekDev($.uid)) {
+            return { teks: TEKS[$.bahasa]['permission/onlydev'] };
         }
-        if (!pesan.argumen) {
-            return { teks: $teks[pesan.bahasa]['command/eval/noargs'] };
+        if (!$.argumen) {
+            return { teks: TEKS[$.bahasa]['command/eval/noargs'] };
         }
         let hasil;
         try {
-            hasil = await eval(pesan.argumen);
+            hasil = await eval($.argumen);
         } catch (eror) {
             hasil = eror.stack ?? eror;
         } finally {
@@ -93,10 +94,10 @@ const Perintah = {
         }
     },
     help: () => Perintah.menu(),
-    kbbi: async (pesan) => {
-        if (pesan.argumen) {
+    kbbi: async ($) => {
+        if ($.arg) {
             try {
-                const f = await fetch('https://kateglo.com/api.php?format=json&phrase=' + encodeURIComponent(pesan.argumen.trim()));
+                const f = await fetch('https://kateglo.com/api.php?format=json&phrase=' + encodeURIComponent($.arg.trim()));
                 const res = (await f.json()).kateglo;
                 const kata = res.phrase ? res.phrase.toUpperCase() : res.phrase;
                 const akar = res.root[0] ? res.root.map((v) => v.root_phrase).join(' -> ') : '';
@@ -108,7 +109,7 @@ const Perintah = {
                 (res.definition || []).forEach((v, i) => {
                     let teks = `\n${v.def_num || i + 1}. ${v.discipline ? `[${v.discipline}] ` : ''}${v.def_text}`;
                     if (v.sample) teks += `\n=> ${v.sample}`;
-                    if (v.see) teks += `\n${$teks[pesan.bahasa]['command/kbbi/seealso']}: ${v.see}`;
+                    if (v.see) teks += `\n${TEKS[$.bahasa]['command/kbbi/seealso']}: ${v.see}`;
                     definisi += teks;
                 });
                 const sinonim = Object.values(res.relation?.s || {})
@@ -134,16 +135,16 @@ const Perintah = {
                 const translasi = (res.translations || []).map((v) => `• [${v.ref_source}] ${v.translation}`).join('\n');
                 let peribahasa = '';
                 (res.proverbs || []).forEach((v) => {
-                    peribahasa += `\n• ${v.proverb}\n${$teks[pesan.bahasa]['command/kbbi/meaning']}: ${v.meaning}`;
+                    peribahasa += `\n• ${v.proverb}\n${TEKS[$.bahasa]['command/kbbi/meaning']}: ${v.meaning}`;
                 });
                 const others = [
-                    sinonim ? `${$teks[pesan.bahasa]['command/kbbi/synonyms']}: ${sinonim.trim()}` : '',
-                    antonim ? `${$teks[pesan.bahasa]['command/kbbi/antonyms']}: ${antonim.trim()}` : '',
-                    terkait ? `${$teks[pesan.bahasa]['command/kbbi/related']}: ${terkait.trim()}` : '',
-                    kataTurunan ? `${$teks[pesan.bahasa]['command/kbbi/descendants']}: ${kataTurunan.trim()}` : '',
-                    gabunganKata ? `${$teks[pesan.bahasa]['command/kbbi/combinations']}: ${gabunganKata.trim()}` : '',
-                    peribahasa ? `${$teks[pesan.bahasa]['command/kbbi/proverbs']}:\n${peribahasa.trim()}` : '',
-                    translasi ? `${$teks[pesan.bahasa]['command/kbbi/translations']}:\n${translasi.trim()}` : '',
+                    sinonim ? `${TEKS[$.bahasa]['command/kbbi/synonyms']}: ${sinonim.trim()}` : '',
+                    antonim ? `${TEKS[$.bahasa]['command/kbbi/antonyms']}: ${antonim.trim()}` : '',
+                    terkait ? `${TEKS[$.bahasa]['command/kbbi/related']}: ${terkait.trim()}` : '',
+                    kataTurunan ? `${TEKS[$.bahasa]['command/kbbi/descendants']}: ${kataTurunan.trim()}` : '',
+                    gabunganKata ? `${TEKS[$.bahasa]['command/kbbi/combinations']}: ${gabunganKata.trim()}` : '',
+                    peribahasa ? `${TEKS[$.bahasa]['command/kbbi/proverbs']}:\n${peribahasa.trim()}` : '',
+                    translasi ? `${TEKS[$.bahasa]['command/kbbi/translations']}:\n${translasi.trim()}` : '',
                 ]
                     .filter((v) => v)
                     .join('\n\n');
@@ -152,23 +153,23 @@ const Perintah = {
                 };
             } catch (eror) {
                 return {
-                    teks: $teks[pesan.bahasa]['command/kbbi/error'] + '\n\n' + String(eror),
+                    teks: TEKS[$.bahasa]['command/kbbi/error'] + '\n\n' + String(eror),
                 };
             }
         } else {
             return {
-                teks: $teks[pesan.bahasa]['command/kbbi/noargs'],
+                teks: TEKS[$.bahasa]['command/kbbi/noargs'],
             };
         }
     },
-    lowercase: (pesan) => {
-        if (pesan.argumen) {
+    lowercase: ($) => {
+        if ($.arg) {
             return {
-                teks: pesan.argumen.toLowerCase(),
+                teks: $.arg.toLowerCase(),
             };
         } else {
             return {
-                teks: $teks[pesan.bahasa]['command/lowercase/noargs'],
+                teks: TEKS[$.bahasa]['command/lowercase/noargs'],
             };
         }
     },
@@ -179,30 +180,30 @@ const Perintah = {
                 .join('\n'),
         };
     },
-    reversetext: (pesan) => {
-        if (pesan.argumen) {
+    reversetext: ($) => {
+        if ($.arg) {
             return {
-                teks: _.split(pesan.argumen, '').reverse().join(''),
+                teks: _.split($.arg, '').reverse().join(''),
             };
         } else {
             return {
-                teks: $teks[pesan.bahasa]['command/reversetext/noargs'],
+                teks: TEKS[$.bahasa]['command/reversetext/noargs'],
             };
         }
     },
-    say: (pesan) => {
+    say: ($) => {
         return {
-            teks: pesan.argumen,
+            teks: $.arg,
         };
     },
-    uppercase: (pesan) => {
-        if (pesan.argumen) {
+    uppercase: ($) => {
+        if ($.arg) {
             return {
-                teks: pesan.argumen.toUpperCase(),
+                teks: $.arg.toUpperCase(),
             };
         } else {
             return {
-                teks: $teks[pesan.bahasa]['command/uppercase/noargs'],
+                teks: TEKS[$.bahasa]['command/uppercase/noargs'],
             };
         }
     },

@@ -76,6 +76,8 @@ function mulai() {
 
                 if (tipe === 'imageMessage') {
                     _.gambar = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|image|jpg`;
+                } else if (tipe === 'stickerMessage') {
+                    _.stiker = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|sticker|webp`;
                 }
 
                 return _;
@@ -152,6 +154,8 @@ async function kirimPesan(pesan) {
         if (pesan._.gambar) {
             msg.image = { url: pesan._.gambar };
             msg.caption = pesan._.teks;
+        } else if (pesan._.stiker) {
+            msg.sticker = { url: pesan._.stiker };
         } else {
             msg.text = pesan._.teks;
         }
