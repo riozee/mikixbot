@@ -68,6 +68,8 @@ Argumen-argumen:
     Mengaktifkan mode pengembangan/debug.
 -   `--watch`\
     Mengaktifkan mode muat ulang setelah file berubah.
+-   `--dbtest`\
+    Menggunakan database testing.
 -   `--devids=[ID1],[ID2],[ID3]`\
     ID pengembang dari masing-masing platform (seperti nomor telepon WA). Digunakan untuk mengidentifikasi dan menjalankan perintah khusus pengembang bot.
 -   `--mongodburi=[URI]` \*\
@@ -120,47 +122,36 @@ Pesan lainnya
 
 ## Database
 
-Database yang digunakan adalah MongoDB Atlas.
+Database yang digunakan adalah MongoDB Atlas. Semua data disimpan dalam satu koleksi (collection).
 
-Anda harus mengirimkan kueri ke `DB` (database) untuk mengakses database. Format pesan yang dikirimkan adalah:
+Ada 4 operasi utama dalam mengakses database:
 
--   `koleksi` = koleksi (collection) database yang akan diakses
--   `aksi` = aksi (action) yang akan dijalankan pada database
+-   Create/insert
+    ```
+    IPC.kirimKueri('DB', {
+        c: {data} | {data}[]
+    });
+    ```
+-   Read/find
+    ```
+    IPC.kirimKueri('DB', {
+        r: {filter},
+        m: true|false // many
+    });
+    ```
+-   Update
+    ```
+    IPC.kirimKueri('DB', {
+        u: [{filter}, {data}],
+        m: true|false // many
+    });
+    ```
+-   Delete
+    ```
+    IPC.kirimKueri('DB', { d: {filter}, m: true|false // many });
+    ```
 
-> &nbsp;\
-> Contoh untuk kueri:
->
-> ```
-> client.db().collection('users').find({_id: id}).toArray();
-> ```
->
-> adalah:
->
-> ```
-> IPC.kirimKueri('DB', {
->    koleksi: 'users',
->    aksi: [ ['find', {_id: id}], 'toArray' ]
-> });
-> ```
->
-> &nbsp;
-
-&nbsp;
-
-## Format dokumen pada koleksi "users"
-
--   `_id: [ID Pengguna]` \*
--   `hit: [int]` (jumlah perintah/command dijalankan)
--   `bnd: [boolean]` (status banned/blokir)
--   `lng: [string]` (kode bahasa default)
--   `rgd: [timestamp]` (waktu pertama terdaftar)
--   `usn: [string]` (username)
-
-&nbsp;
-
-## Format dokumen pada koleksi "chats"
-
-[TODO]
+> Note: Urutan data di cache dapat berbeda dengan data di server. Pastikan gunakan `_id` untuk memfilter satu dokumen (document).
 
 &nbsp;
 

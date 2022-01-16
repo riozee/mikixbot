@@ -213,12 +213,27 @@ function cekDev(id) {
     return false;
 }
 
-function kueriDB(koleksi, ...aksi) {
-    return IPC.kirimKueri('DB', {
-        koleksi: koleksi,
-        aksi: aksi,
-    });
-}
+const DB = {
+    buat: (data) =>
+        IPC.kirimKueri('DB', {
+            c: data,
+        }),
+    cari: (filter, banyak) =>
+        IPC.kirimKueri('DB', {
+            r: filter,
+            m: banyak,
+        }),
+    perbarui: (filter, data, banyak) =>
+        IPC.kirimKueri('DB', {
+            u: [filter, data],
+            m: banyak,
+        }),
+    hapus: (filter, banyak) =>
+        IPC.kirimKueri('DB', {
+            d: filter,
+            m: banyak,
+        }),
+};
 
 function logPesan(d, pesan, bot) {
     function getColor(id) {

@@ -83,6 +83,7 @@ function log(kode, nama, ...argumen2) {
 }
 
 function logNoDev(kode, nama, ...argumen2) {
+    if (argv.dev) return;
     return console.log(
         [
             `[MAIN] [LOG] memulai subproses ${nama}`, // 0

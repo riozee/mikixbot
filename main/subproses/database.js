@@ -2,8 +2,16 @@ const utils = require('../utils');
 const IPC = new utils.IPC('DB', process);
 
 const { MongoClient } = require('mongodb');
+const _ = require('lodash');
 
 const argv = JSON.parse(process.argv[2]);
+
+const cache = [];
+
+setInterval(() => {
+    log(6);
+    cache = [];
+}, 3600);
 
 log(0);
 const klien = new MongoClient(argv.mongodburi);
@@ -11,18 +19,47 @@ const klien = new MongoClient(argv.mongodburi);
 klien.connect().then(() => log(1));
 
 async function proses(pesan) {
-    let awal = true;
     log(2, pesan);
+    let hasil;
     try {
-        const db = klien.db().collection(pesan._.koleksi);
-        for (const aksi of pesan._.aksi) {
-            const [metode, ...argumen] = Array.isArray(aksi) ? aksi : [aksi, []];
-            if (awal) {
-                hasil = await db[metode](...argumen);
-                awal = false;
+        const db = klien.db().collection(argv.dbtest ? 'test' : 'data');
+        if (pesan._.hasOwnProperty('c')) {
+            if (Array.isArray(pesan._.c)) {
+                hasil = await db.insertMany(pesan._.c);
+                pesan._.c.forEach((data) => cache.push(data));
             } else {
-                hasil = await hasil[metode](...argumen);
+                hasil = await db.insertOne(pesan._.c);
+                cache.push(pesan._.c);
             }
+        } else if (pesan._.hasOwnProperty('r')) {
+            let results = _.filter(cache, pesan._.r);
+            if (pesan._.m) {
+                if (!results.length) {
+                    results = await db.find(pesan._.r).toArray();
+                    results.forEach((data) => cache.push(data));
+                }
+                hasil = results;
+            } else {
+                if (!results.length) {
+                    results = [await db.findOne(pesan._.r)];
+                    cache.push(results[0]);
+                }
+                hasil = results[0];
+            }
+        } else if (pesan._.hasOwnProperty('u')) {
+            if (pesan._.m) {
+                hasil = await db.updateMany(pesan._.u[0], pesan._.u[1]);
+            } else {
+                hasil = await db.updateOne(pesan._.u[0], pesan._.u[1]);
+            }
+            _.remove(cache, pesan._.u[0]);
+        } else if (pesan._.hasOwnProperty('d')) {
+            if (pesan._.m) {
+                hasil = await db.deleteMany(pesan._.d);
+            } else {
+                hasil = await db.deleteOne(pesan._.d);
+            }
+            _.remove(cache, pesan._.d);
         }
     } catch (e) {
         log(4);
@@ -61,6 +98,7 @@ function log(kode, ...argumen2) {
             `[DATABASE] [ERROR] terjadi error di database`, // 4
             `[DATABASE] [LOG] mengirim pesan ke proses utama`, // 5
             `[DATABASE] [LOG] memulai ulang proses`, // 5
+            `[DATABASE] [LOG] membersihkan cache`, // 6
         ][kode],
         ...argumen2
     );
