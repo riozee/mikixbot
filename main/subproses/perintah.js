@@ -22,54 +22,60 @@ const cache = { colors: {} };
 
 //////////////////// UTAMA
 
-async function pesanMasuk($pesan) {
-    log(1, $pesan);
-    const pesan = $pesan._;
-    pesan.bahasa = 'id';
+async function proses(pesan) {
+    log(1, pesan);
 
-    if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test(pesan.teks)) {
-        const _perintah = pesan.teks.split(/\s+/)[0];
-
-        pesan.argumen = pesan.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
-        pesan.perintah = _perintah.slice(1).toLowerCase();
-        pesan.arg = pesan.argumen || pesan.q?.teks;
-
-        log(2, pesan.teks);
-        logPesan($pesan.d, pesan);
-
-        if (Perintah.hasOwnProperty(pesan.perintah)) {
-            const msg = {
-                penerima: pesan.pengirim,
-                mid: pesan.mid,
-                re: true,
-            };
-            try {
-                const hasil = {
-                    ...msg,
-                    ...(await Perintah[pesan.perintah](pesan)),
-                };
-                log(5, hasil);
-                logPesan($pesan.d, hasil, true);
-                return IPC.kirimSinyal($pesan.d, hasil);
-            } catch (e) {
-                log(6, pesan.teks);
-                console.error(e);
-                const hasil = {
-                    ...msg,
-                    teks: TEKS[pesan.bahasa]['system/error'],
-                };
-                logPesan($pesan.d, hasil, true);
-                return IPC.kirimSinyal($pesan.d, hasil);
-            }
+    if (pesan._.teks) {
+        if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test(pesan._.teks)) {
+            perintah(pesan);
         } else {
-            log(4, pesan.perintah);
+            log(3, pesan._.teks);
         }
-    } else {
-        log(3, pesan.teks);
     }
 }
 
 //////////////////// PERINTAH-PERINTAH
+
+async function perintah(pesan) {
+    const $ = pesan._;
+    $.bahasa = 'id';
+    const _perintah = $.teks.split(/\s+/)[0];
+
+    $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
+    $.perintah = _perintah.slice(1).toLowerCase();
+    $.arg = $.argumen || $.q?.teks;
+
+    log(2, $.teks);
+    logPesan(pesan.d, $);
+
+    if (Perintah.hasOwnProperty($.perintah)) {
+        const msg = {
+            penerima: $.pengirim,
+            mid: $.mid,
+            re: true,
+        };
+        try {
+            const hasil = {
+                ...msg,
+                ...(await Perintah[$.perintah]($)),
+            };
+            log(5, hasil);
+            logPesan(pesan.d, hasil, true);
+            return IPC.kirimSinyal(pesan.d, hasil);
+        } catch (e) {
+            log(6, $.teks);
+            console.error(e);
+            const hasil = {
+                ...msg,
+                teks: TEKS[$.bahasa]['system/error'],
+            };
+            logPesan(pesan.d, hasil, true);
+            return IPC.kirimSinyal(pesan.d, hasil);
+        }
+    } else {
+        log(4, $.perintah);
+    }
+}
 
 const Perintah = {
     about: ($) => {
@@ -268,7 +274,7 @@ function logPesan(d, pesan, bot) {
 process.on('message', async (pesan) => {
     if (pesan.hasOwnProperty('_')) {
         if (pesan._.hasOwnProperty('pengirim')) {
-            return await IPC.terimaSinyal(pesan, pesanMasuk);
+            return await IPC.terimaSinyal(pesan, proses);
         }
     }
 });
