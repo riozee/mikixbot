@@ -47,6 +47,8 @@ bot.on('message', (konteks) => {
             _.video = `${message.video.file_id}|mp4|${message.video.file_size}`;
         } else if (message?.location) {
             _.lokasi = `${message.location.latitude}|${message.location.longitude}`;
+        } else if (message?.audio) {
+            _.audio = `${message.audio.file_id}|mp3|${message.audio.file_size}`;
         }
 
         return _;
@@ -100,6 +102,15 @@ async function kirimPesan(pesan) {
         } else if ($pesan.lokasi) {
             const [latitude, longitude] = $pesan.lokasi.split('|');
             await bot.telegram.sendLocation(penerima, latitude, longitude, opsi);
+        } else if ($pesan.audio) {
+            if ($pesan.teks) {
+                const teksAwal = $pesan.teks.length > 1096 ? $pesan.teks.slice(0, 1096) : $pesan.teks,
+                    teksSisa = $pesan.teks.length > 1096 ? $pesan.teks.slice(1096) : '';
+                await bot.telegram.sendAudio(penerima, { source: $pesan.audio }, { ...opsi, caption: teksAwal });
+                if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+            } else {
+                await bot.telegram.sendAudio(penerima, { source: $pesan.audio }, opsi);
+            }
         } else {
             await kirimPesanTeks(penerima, $pesan.teks, opsi);
         }

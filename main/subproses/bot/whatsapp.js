@@ -77,6 +77,8 @@ function mulai() {
                     _.video = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video|mp4|${Number(isi.fileLength)}`;
                 } else if (tipe === 'locationMessage' || tipe === 'liveLocationMessage') {
                     _.lokasi = `${isi.degreesLatitude}|${isi.degreesLongitude}`;
+                } else if (tipe === 'audioMessage') {
+                    _.audio = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|audio|mp3|${Number(isi.fileLength)}`;
                 }
 
                 return _;
@@ -161,6 +163,13 @@ async function kirimPesan(pesan) {
         } else if (pesan._.lokasi) {
             const [latitude, longitude] = pesan._.lokasi.split('|');
             msg.location = { degreesLatitude: latitude, degreesLongitude: longitude };
+        } else if (pesan._.audio) {
+            if (pesan._.teks) {
+                await bot.sendMessage(penerima, { audio: { url: pesan._.audio } }, opsi);
+                msg.text = pesan._.teks;
+            } else {
+                msg.audio = { url: pesan._.audio };
+            }
         } else {
             msg.text = pesan._.teks;
         }
