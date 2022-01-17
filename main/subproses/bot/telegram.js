@@ -1,4 +1,4 @@
-const utils = require('../utils');
+const utils = require('../../utils');
 const IPC = new utils.IPC('TG', process);
 
 const fs = require('fs/promises');

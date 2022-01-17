@@ -9,54 +9,54 @@ const argv = minimist(process.argv.slice(2));
 
 const proses2 = {};
 
-const subproses = ['database', 'perintah'];
+const subproses = ['./main/subproses/database.js', './main/subproses/perintah.js'];
 if (argv.s) {
     for (const s of argv.s.split(',')) {
-        subproses.push(s);
+        subproses.push(`./main/subproses/bot/${s}.js`);
     }
 }
 for (const proses of subproses) {
     mulaiProses(proses);
 }
 
-function mulaiProses(nama) {
-    log(0, nama);
-    logNoDev(0, nama);
-    proses2[nama] = fork(`./main/subproses/${nama}.js`, [JSON.stringify(argv)]);
-    proses2[nama].on('message', (pesan) => {
-        log(1, nama, pesan);
+function mulaiProses(file) {
+    log(0, file);
+    logNoDev(0, file);
+    proses2[file] = fork(file, [JSON.stringify(argv)]);
+    proses2[file].on('message', (pesan) => {
+        log(1, file, pesan);
         main(pesan);
     });
-    proses2[nama].on('error', (eror) => {
-        log(2, nama);
-        logNoDev(1, nama);
+    proses2[file].on('error', (eror) => {
+        log(2, file);
+        logNoDev(1, file);
         console.error(eror);
     });
-    proses2[nama].on('exit', (kode) => {
-        log(3, nama, kode);
-        logNoDev(2, nama, kode);
-        delete proses2[nama];
-        return mulaiProses(nama);
+    proses2[file].on('exit', (kode) => {
+        log(3, file, kode);
+        logNoDev(2, file, kode);
+        delete proses2[file];
+        return mulaiProses(file);
     });
 }
 
 async function main(pesan) {
     if (pesan.hasOwnProperty('k')) {
         if (pesan.k === 'PR') {
-            teruskanKe('perintah', pesan);
+            teruskanKe('./main/subproses/perintah.js', pesan);
         } else if (pesan.k === 'DB') {
-            teruskanKe('database', pesan);
+            teruskanKe('./main/subproses/database.js', pesan);
         } else if (pesan.k === 'TG') {
-            teruskanKe('telegram', pesan);
+            teruskanKe('./main/subproses/bot/telegram.js', pesan);
         } else if (pesan.k === 'WA') {
-            teruskanKe('whatsapp', pesan);
+            teruskanKe('./main/subproses/bot/whatsapp.js', pesan);
         }
 
         //////////////////////////////
         else if (pesan.k === 'MAIN') {
             if (pesan.hasOwnProperty('d') && pesan.d === 'PR') {
                 if (pesan.hasOwnProperty('_') && pesan._.hasOwnProperty('_eval')) {
-                    teruskanKe('perintah', {
+                    teruskanKe('./main/subproses/perintah.js', {
                         ir: pesan.i,
                         _: await jalankanFn(() => eval(pesan._._eval)),
                     });

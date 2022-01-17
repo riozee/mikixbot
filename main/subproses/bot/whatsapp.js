@@ -1,4 +1,4 @@
-const utils = require('../utils');
+const utils = require('../../utils');
 const IPC = new utils.IPC('WA', process);
 const fetch = require('node-fetch');
 const fs = require('fs/promises');
