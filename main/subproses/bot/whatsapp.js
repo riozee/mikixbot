@@ -75,6 +75,8 @@ function mulai() {
                     _.stiker = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|sticker|webp`;
                 } else if (tipe === 'videoMessage') {
                     _.video = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video|mp4|${Number(isi.fileLength)}`;
+                } else if (tipe === 'locationMessage' || tipe === 'liveLocationMessage') {
+                    _.lokasi = `${isi.degreesLatitude}|${isi.degreesLongitude}`;
                 }
 
                 return _;
@@ -156,6 +158,9 @@ async function kirimPesan(pesan) {
         } else if (pesan._.video) {
             msg.video = { url: pesan._.video };
             msg.caption = pesan._.teks;
+        } else if (pesan._.lokasi) {
+            const [latitude, longitude] = pesan._.lokasi.split('|');
+            msg.location = { degreesLatitude: latitude, degreesLongitude: longitude };
         } else {
             msg.text = pesan._.teks;
         }
