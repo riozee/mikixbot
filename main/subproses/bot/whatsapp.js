@@ -177,7 +177,9 @@ async function unduhMedia(mediaStr) {
     for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
     }
-    return utils.simpanFileSementara('./tmp/', buffer, ext);
+    const keluaran = `./tmp/${Date.now()}#${Math.random().toString(36).slice(2)}.${ext}`;
+    await fs.writeFile(keluaran, buffer);
+    return keluaran;
 }
 
 process.on('message', (pesan) => {

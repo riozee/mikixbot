@@ -9,7 +9,7 @@ const argv = minimist(process.argv.slice(2));
 
 const proses2 = {};
 
-const subproses = ['./main/subproses/database.js', './main/subproses/perintah.js'];
+const subproses = ['./main/subproses/database.js', './main/subproses/perintah.js', './main/subproses/timer.js'];
 if (argv.s) {
     for (const s of argv.s.split(',')) {
         subproses.push(`./main/subproses/bot/${s}.js`);

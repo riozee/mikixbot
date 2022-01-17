@@ -101,7 +101,9 @@ async function unduhMedia(mediaStr) {
     const tautan = (await bot.telegram.getFileLink(file_id)).href;
     const f = await fetch(tautan);
     const buffer = await f.buffer();
-    return utils.simpanFileSementara('./tmp/', buffer, eks);
+    const keluaran = `./tmp/${Date.now()}#${Math.random().toString(36).slice(2)}.${eks}`;
+    await fs.writeFile(keluaran, buffer);
+    return keluaran;
 }
 
 process.on('message', (pesan) => {
