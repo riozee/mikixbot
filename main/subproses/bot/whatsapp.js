@@ -66,18 +66,15 @@ function mulai() {
                 const _ = {};
 
                 const teks =
-                    (typeof isi === 'string' ? isi : '') ||
-                    isi.caption ||
-                    isi.text ||
-                    isi.singleSelectReply?.selectedRowId ||
-                    isi.selectedButtonId ||
-                    '';
+                    (typeof isi === 'string' ? isi : '') || isi.caption || isi.text || isi.singleSelectReply?.selectedRowId || isi.selectedButtonId || '';
                 if (teks) _.teks = teks;
 
                 if (tipe === 'imageMessage') {
                     _.gambar = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|image|jpg`;
                 } else if (tipe === 'stickerMessage') {
                     _.stiker = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|sticker|webp`;
+                } else if (tipe === 'videoMessage') {
+                    _.video = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video|mp4|${Number(isi.fileLength)}`;
                 }
 
                 return _;
@@ -156,6 +153,9 @@ async function kirimPesan(pesan) {
             msg.caption = pesan._.teks;
         } else if (pesan._.stiker) {
             msg.sticker = { url: pesan._.stiker };
+        } else if (pesan._.video) {
+            msg.video = { url: pesan._.video };
+            msg.caption = pesan._.teks;
         } else {
             msg.text = pesan._.teks;
         }

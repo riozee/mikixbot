@@ -6,6 +6,8 @@ const util = require('util');
 const _ = require('lodash');
 const fetch = require('node-fetch');
 const chalk = require('chalk');
+const gif = require('../alat/gif_konversi');
+const webp = require('../alat/webp_konversi');
 
 //////////////////// VARS
 

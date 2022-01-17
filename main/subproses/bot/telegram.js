@@ -43,6 +43,8 @@ bot.on('message', (konteks) => {
             } else {
                 _.stiker = `${message.sticker.file_id}|webp`;
             }
+        } else if (message?.video) {
+            _.video = `${message.video.file_id}|mp4|${message.video.file_size}`;
         }
 
         return _;
@@ -81,6 +83,15 @@ async function kirimPesan(pesan) {
                 if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
             } else {
                 await bot.telegram.sendPhoto(penerima, { source: $pesan.gambar }, opsi);
+            }
+        } else if ($pesan.video) {
+            if ($pesan.teks) {
+                const teksAwal = $pesan.teks.length > 1096 ? $pesan.teks.slice(0, 1096) : $pesan.teks,
+                    teksSisa = $pesan.teks.length > 1096 ? $pesan.teks.slice(1096) : '';
+                await bot.telegram.sendVideo(penerima, { source: $pesan.video }, { ...opsi, caption: teksAwal });
+                if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+            } else {
+                await bot.telegram.sendVideo(penerima, { source: $pesan.video }, opsi);
             }
         } else if ($pesan.stiker) {
             await bot.telegram.sendSticker(penerima, { source: $pesan.stiker }, opsi);
