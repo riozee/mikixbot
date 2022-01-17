@@ -18,7 +18,9 @@ for (const file of fs.readdirSync('./res/teks')) {
 
 log(0, Object.keys(TEKS));
 
-const cache = { colors: {} };
+const cache = {
+    colors: {},
+};
 
 //////////////////// UTAMA
 
@@ -85,10 +87,14 @@ const Perintah = {
     },
     eval: async ($) => {
         if (!cekDev($.uid)) {
-            return { teks: TEKS[$.bahasa]['permission/onlydev'] };
+            return {
+                teks: TEKS[$.bahasa]['permission/onlydev'],
+            };
         }
         if (!$.argumen) {
-            return { teks: TEKS[$.bahasa]['command/eval/noargs'] };
+            return {
+                teks: TEKS[$.bahasa]['command/eval/noargs'],
+            };
         }
         let hasil;
         try {
@@ -96,26 +102,29 @@ const Perintah = {
         } catch (eror) {
             hasil = eror.stack ?? eror;
         } finally {
-            return { teks: util.format(hasil) };
+            return {
+                teks: util.format(hasil),
+            };
         }
     },
     help: () => Perintah.menu(),
     kbbi: async ($) => {
         if ($.arg) {
             try {
+                const [ANTONIM, GABUNGANKATA, KATATURUNAN, ARTI, PERIBAHASA, TERKAIT, LIHATJUGA, SINONIM, TRANSLASI] = TEKS[$.bahasa]['command/kbbi/$words']
+                    .split('|')
+                    .map((v) => v.trim());
                 const f = await fetch('https://kateglo.com/api.php?format=json&phrase=' + encodeURIComponent($.arg.trim()));
                 const res = (await f.json()).kateglo;
                 const kata = res.phrase ? res.phrase.toUpperCase() : res.phrase;
                 const akar = res.root[0] ? res.root.map((v) => v.root_phrase).join(' -> ') : '';
                 const kelasLeksikal =
-                    res.lex_class_name || res.lex_class_ref
-                        ? (res.lex_class_name || res.lex_class_ref).toLowerCase()
-                        : res.lex_class_name || res.lex_class_ref;
+                    res.lex_class_name || res.lex_class_ref ? (res.lex_class_name || res.lex_class_ref).toLowerCase() : res.lex_class_name || res.lex_class_ref;
                 let definisi = '';
                 (res.definition || []).forEach((v, i) => {
                     let teks = `\n${v.def_num || i + 1}. ${v.discipline ? `[${v.discipline}] ` : ''}${v.def_text}`;
                     if (v.sample) teks += `\n=> ${v.sample}`;
-                    if (v.see) teks += `\n${TEKS[$.bahasa]['command/kbbi/seealso']}: ${v.see}`;
+                    if (v.see) teks += `\n${LIHATJUGA}: ${v.see}`;
                     definisi += teks;
                 });
                 const sinonim = Object.values(res.relation?.s || {})
@@ -141,16 +150,16 @@ const Perintah = {
                 const translasi = (res.translations || []).map((v) => `• [${v.ref_source}] ${v.translation}`).join('\n');
                 let peribahasa = '';
                 (res.proverbs || []).forEach((v) => {
-                    peribahasa += `\n• ${v.proverb}\n${TEKS[$.bahasa]['command/kbbi/meaning']}: ${v.meaning}`;
+                    peribahasa += `\n• ${v.proverb}\n${ARTI}: ${v.meaning}`;
                 });
                 const others = [
-                    sinonim ? `${TEKS[$.bahasa]['command/kbbi/synonyms']}: ${sinonim.trim()}` : '',
-                    antonim ? `${TEKS[$.bahasa]['command/kbbi/antonyms']}: ${antonim.trim()}` : '',
-                    terkait ? `${TEKS[$.bahasa]['command/kbbi/related']}: ${terkait.trim()}` : '',
-                    kataTurunan ? `${TEKS[$.bahasa]['command/kbbi/descendants']}: ${kataTurunan.trim()}` : '',
-                    gabunganKata ? `${TEKS[$.bahasa]['command/kbbi/combinations']}: ${gabunganKata.trim()}` : '',
-                    peribahasa ? `${TEKS[$.bahasa]['command/kbbi/proverbs']}:\n${peribahasa.trim()}` : '',
-                    translasi ? `${TEKS[$.bahasa]['command/kbbi/translations']}:\n${translasi.trim()}` : '',
+                    sinonim ? `${SINONIM}: ${sinonim.trim()}` : '',
+                    antonim ? `${ANTONIM}: ${antonim.trim()}` : '',
+                    terkait ? `${TERKAIT}: ${terkait.trim()}` : '',
+                    kataTurunan ? `${KATATURUNAN}: ${kataTurunan.trim()}` : '',
+                    gabunganKata ? `${GABUNGANKATA}: ${gabunganKata.trim()}` : '',
+                    peribahasa ? `${PERIBAHASA}:\n${peribahasa.trim()}` : '',
+                    translasi ? `${TRANSLASI}:\n${translasi.trim()}` : '',
                 ]
                     .filter((v) => v)
                     .join('\n\n');
@@ -179,13 +188,14 @@ const Perintah = {
             };
         }
     },
-    menu: () => {
-        return {
-            teks: Object.keys(Perintah)
+    menu: ($) => ({
+        teks: TEKS[$.bahasa]['command/menu'].replace(
+            '%',
+            Object.keys(Perintah)
                 .map((v) => '/' + v)
-                .join('\n'),
-        };
-    },
+                .join('\n')
+        ),
+    }),
     reversetext: ($) => {
         if ($.arg) {
             return {
@@ -260,13 +270,7 @@ function logPesan(d, pesan, bot) {
     if (bot || pesan.uid !== chat) {
         id.push(chalk.hsv(...getColor(chat), 100)(chat));
     }
-    return console.log(
-        new Date().toLocaleDateString(),
-        new Date().toLocaleTimeString(),
-        chalk.cyan(`<${d.toUpperCase()}>`),
-        id.join(':'),
-        pesan.teks
-    );
+    return console.log(new Date().toLocaleDateString(), new Date().toLocaleTimeString(), chalk.cyan(`<${d.toUpperCase()}>`), id.join(':'), pesan.teks);
 }
 
 ////////////////////
