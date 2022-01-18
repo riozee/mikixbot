@@ -6,11 +6,13 @@ const _ = require('lodash');
 
 const argv = JSON.parse(process.argv[2]);
 
-const cache = [];
+const cache = [],
+    idTidakAda = [];
 
 setInterval(() => {
     log(7);
     while (cache.pop()) {}
+    while (idTidakAda.pop()) {}
 }, 3600000);
 
 log(0);
@@ -25,24 +27,46 @@ async function proses(pesan) {
         const db = klien.db().collection(argv.dbtest ? 'test' : 'data');
         if (pesan._.hasOwnProperty('c')) {
             if (Array.isArray(pesan._.c)) {
+                for (const c of pesan._.c) {
+                    if (!c._id) throw 'Tidak ada _id.';
+                }
                 hasil = await db.insertMany(pesan._.c);
-                pesan._.c.forEach((data) => cache.push(data));
+                for (const data of pesan._.c) {
+                    cache.push(data);
+                    _.pull(idTidakAda, data._id);
+                }
             } else {
+                if (!pesan._.c._id) throw 'Tidak ada _id.';
                 hasil = await db.insertOne(pesan._.c);
                 cache.push(pesan._.c);
+                _.pull(idTidakAda, pesan._.c._id);
             }
         } else if (pesan._.hasOwnProperty('r')) {
-            let results = _.filter(cache, pesan._.r);
             if (pesan._.m) {
+                let results = _.filter(cache, pesan._.r);
                 if (!results.length) {
                     results = await db.find(pesan._.r).toArray();
-                    results.forEach((data) => cache.push(data));
+                    for (const data of results) {
+                        cache.push(data);
+                        _.pull(idTidakAda, data._id);
+                    }
                 }
                 hasil = results;
             } else {
-                if (!results.length) {
-                    results = [await db.findOne(pesan._.r)];
-                    cache.push(results[0]);
+                let results;
+                if (pesan._.r._id && idTidakAda.includes(pesan._.r._id)) {
+                    results = [null];
+                } else {
+                    results = _.filter(cache, pesan._.r);
+                    if (!results.length) {
+                        results = [await db.findOne(pesan._.r)];
+                        if (!results[0]) {
+                            if (pesan._.r._id) idTidakAda.push(pesan._.r._id);
+                        } else {
+                            cache.push(results[0]);
+                            _.pull(idTidakAda, results[0]._id);
+                        }
+                    }
                 }
                 hasil = results[0];
             }
