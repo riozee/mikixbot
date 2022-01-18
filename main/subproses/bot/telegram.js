@@ -37,10 +37,11 @@ bot.on('message', (konteks) => {
         if (teks) _.teks = teks;
 
         if (message?.photo?.length) {
+            const gambar = message.photo.reverse()[0];
             _.gambar = {
-                id: message.photo.reverse()[0].file_id,
+                id: gambar.file_id,
                 eks: 'jpg',
-                ukuran: message.photo.file_size,
+                ukuran: gambar.file_size,
             };
         } else if (message?.sticker) {
             _.stiker = {
