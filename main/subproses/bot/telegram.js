@@ -55,6 +55,13 @@ bot.on('message', (konteks) => {
                 eks: 'mp4',
                 ukuran: message.video.file_size,
             };
+        } else if (message?.video_note) {
+            _.video = {
+                id: message.video_note.file_id,
+                eks: 'mp4',
+                ukuran: message.video_note.file_size,
+                tg_video_note: true,
+            };
         } else if (message?.location) {
             _.lokasi = {
                 lat: message.location.latitude,
@@ -130,17 +137,32 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// VIDEO
         else if ($.video) {
-            if ($.teks) {
-                const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
-                    teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
-                if ($.video.id) await bot.telegram.sendVideo(penerima, $.video.id, { ...opsi, caption: teksAwal });
-                else if ($.video.file) await bot.telegram.sendVideo(penerima, { source: $.video.file }, { ...opsi, caption: teksAwal });
-                else if ($.video.url) await bot.telegram.sendVideo(penerima, { url: $.video.url }, { ...opsi, caption: teksAwal });
-                if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+            if ($.video.tg_video_note) {
+                if ($.teks) {
+                    const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
+                        teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
+                    if ($.video.id) await bot.telegram.sendVideoNote(penerima, $.video.id, { ...opsi, caption: teksAwal });
+                    else if ($.video.file) await bot.telegram.sendVideoNote(penerima, { source: $.video.file }, { ...opsi, caption: teksAwal });
+                    else if ($.video.url) await bot.telegram.sendVideoNote(penerima, { url: $.video.url }, { ...opsi, caption: teksAwal });
+                    if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+                } else {
+                    if ($.video.id) await bot.telegram.sendVideoNote(penerima, $.video.id, opsi);
+                    else if ($.video.file) await bot.telegram.sendVideoNote(penerima, { source: $.video.file }, opsi);
+                    else if ($.video.url) await bot.telegram.sendVideoNote(penerima, { url: $.video.url }, opsi);
+                }
             } else {
-                if ($.video.id) await bot.telegram.sendVideo(penerima, $.video.id, opsi);
-                else if ($.video.file) await bot.telegram.sendVideo(penerima, { source: $.video.file }, opsi);
-                else if ($.video.url) await bot.telegram.sendVideo(penerima, { url: $.video.url }, opsi);
+                if ($.teks) {
+                    const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
+                        teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
+                    if ($.video.id) await bot.telegram.sendVideo(penerima, $.video.id, { ...opsi, caption: teksAwal });
+                    else if ($.video.file) await bot.telegram.sendVideo(penerima, { source: $.video.file }, { ...opsi, caption: teksAwal });
+                    else if ($.video.url) await bot.telegram.sendVideo(penerima, { url: $.video.url }, { ...opsi, caption: teksAwal });
+                    if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+                } else {
+                    if ($.video.id) await bot.telegram.sendVideo(penerima, $.video.id, opsi);
+                    else if ($.video.file) await bot.telegram.sendVideo(penerima, { source: $.video.file }, opsi);
+                    else if ($.video.url) await bot.telegram.sendVideo(penerima, { url: $.video.url }, opsi);
+                }
             }
         }
 
