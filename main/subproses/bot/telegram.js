@@ -74,6 +74,11 @@ bot.on('message', (konteks) => {
                 mimetype: mime.lookup(eks) || undefined,
                 namaFile: message.document.file_name,
             };
+        } else if (message?.contact) {
+            _.kontak = {
+                nama: message.contact.first_name + (message.contact.last_name ? ` ${message.contact.last_name}` : ''),
+                nomor: message.contact.phone_number,
+            };
         }
 
         return _;
@@ -178,6 +183,14 @@ async function kirimPesan(pesan) {
                 else if ($.dokumen.file) await bot.telegram.sendDocument(penerima, { source: $.dokumen.file }, opsi);
                 else if ($.dokumen.url) await bot.telegram.sendDocument(penerima, { url: $.dokumen.url }, opsi);
             }
+        }
+
+        //////////////////////////////// KONTAK
+        else if ($.kontak) {
+            await bot.telegram.sendContact(penerima, $.kontak.nomor, $.kontak.nama, {
+                ...opsi,
+                vcard: `BEGIN:VCARD\nVERSION:2.1\nFN:${$.kontak.nama}\nTEL;CELL:${$.kontak.nomor}\nEND:VCARD`,
+            });
         }
 
         //////////////////////////////// TEKS

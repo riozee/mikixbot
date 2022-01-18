@@ -105,6 +105,11 @@ function mulai() {
                         mimetype: isi.mimetype,
                         namaFile: isi.fileName,
                     };
+                } else if (tipe === 'contactMessage') {
+                    _.kontak = {
+                        nama: isi.displayName,
+                        nomor: isi.vcard.match(/TEL.*:([\+\(\)\-\. \d]+)/)?.[1],
+                    };
                 }
 
                 return _;
@@ -239,6 +244,21 @@ async function kirimPesan(pesan) {
                     msg.fileName = $.dokumen.namaFile;
                 }
             }
+        }
+
+        //////////////////////////////// KONTAK
+        else if ($.kontak) {
+            const diWA = (await bot.onWhatsApp($.kontak.nomor.replace(/\D+/g, '')))?.[0]?.exists;
+            msg.contacts = {
+                contacts: [
+                    {
+                        displayName: $.kontak.nama,
+                        vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${$.kontak.nama}\nTEL${diWA ? `;waid=${$.kontak.nomor.replace(/\D+/g, '')}` : ''}:${
+                            $.kontak.nomor
+                        }\nEND:VCARD`,
+                    },
+                ],
+            };
         }
 
         //////////////////////////////// TEKS
