@@ -75,10 +75,12 @@ bot.on('message', (konteks) => {
                 namaFile: message.document.file_name,
             };
         } else if (message?.contact) {
-            _.kontak = {
-                nama: message.contact.first_name + (message.contact.last_name ? ` ${message.contact.last_name}` : ''),
-                nomor: message.contact.phone_number,
-            };
+            _.kontak = [
+                {
+                    nama: message.contact.first_name + (message.contact.last_name ? ` ${message.contact.last_name}` : ''),
+                    nomor: message.contact.phone_number,
+                },
+            ];
         }
 
         return _;
@@ -187,10 +189,12 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// KONTAK
         else if ($.kontak) {
-            await bot.telegram.sendContact(penerima, $.kontak.nomor, $.kontak.nama, {
-                ...opsi,
-                vcard: `BEGIN:VCARD\nVERSION:2.1\nFN:${$.kontak.nama}\nTEL;CELL:${$.kontak.nomor}\nEND:VCARD`,
-            });
+            for await (const kntk of $.kontak) {
+                await bot.telegram.sendContact(penerima, kntk.nomor, kntk.nama, {
+                    ...opsi,
+                    vcard: `BEGIN:VCARD\nVERSION:2.1\nFN:${kntk.nama}\nTEL;CELL:${kntk.nomor}\nEND:VCARD`,
+                });
+            }
         }
 
         //////////////////////////////// TEKS

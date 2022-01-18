@@ -61,6 +61,7 @@ function mulai() {
                 uid: IDPengguna(uid),
                 mid: pesan.key.id,
             };
+            const $pesanLain = [];
 
             function muatPesan(tipe, isi) {
                 const _ = {};
@@ -106,10 +107,20 @@ function mulai() {
                         namaFile: isi.fileName,
                     };
                 } else if (tipe === 'contactMessage') {
-                    _.kontak = {
-                        nama: isi.displayName,
-                        nomor: isi.vcard.match(/TEL.*:([\+\(\)\-\. \d]+)/)?.[1],
-                    };
+                    _.kontak = [
+                        {
+                            nama: isi.displayName,
+                            nomor: isi.vcard.match(/TEL.*:([\+\(\)\-\. \d]+)/)?.[1],
+                        },
+                    ];
+                } else if (tipe === 'contactsArrayMessage') {
+                    _.kontak = [];
+                    isi.contacts.forEach((kontak) => {
+                        _.kontak.push({
+                            nama: kontak.displayName,
+                            nomor: kontak.vcard.match(/TEL.*:([\+\(\)\-\. \d]+)/)?.[1],
+                        });
+                    });
                 }
 
                 return _;
@@ -146,7 +157,12 @@ function mulai() {
                 10000,
                 `${pesan.key.id}`
             );
-            return IPC.kirimSinyal('PR', $pesan);
+            IPC.kirimSinyal('PR', $pesan);
+            if ($pesanLain.length) {
+                for (const $$pesan of $pesanLain) {
+                    IPC.kirimSinyal('PR', $$pesan);
+                }
+            }
         } catch (eror) {
             log(7);
             console.error(eror);
@@ -248,17 +264,15 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// KONTAK
         else if ($.kontak) {
-            const diWA = (await bot.onWhatsApp($.kontak.nomor.replace(/\D+/g, '')))?.[0]?.exists;
-            msg.contacts = {
-                contacts: [
-                    {
-                        displayName: $.kontak.nama,
-                        vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${$.kontak.nama}\nTEL${diWA ? `;waid=${$.kontak.nomor.replace(/\D+/g, '')}` : ''}:${
-                            $.kontak.nomor
-                        }\nEND:VCARD`,
-                    },
-                ],
-            };
+            const kontak = [];
+            for await (const kntk of $.kontak) {
+                const diWA = (await bot.onWhatsApp(kntk.nomor.replace(/\D+/g, '')))?.[0]?.exists;
+                kontak.push({
+                    displayName: kntk.nama,
+                    vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${kntk.nama}\nTEL${diWA ? `;waid=${kntk.nomor.replace(/\D+/g, '')}` : ''}:${kntk.nomor}\nEND:VCARD`,
+                });
+            }
+            msg.contacts = { contacts: kontak };
         }
 
         //////////////////////////////// TEKS

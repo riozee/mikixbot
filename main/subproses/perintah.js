@@ -28,6 +28,7 @@ const cache = {
 
 async function proses(pesan) {
     log(1, pesan);
+    logPesan(pesan.d, pesan._);
 
     if (pesan._.teks) {
         if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test(pesan._.teks)) {
@@ -50,7 +51,6 @@ async function perintah(pesan) {
     $.arg = $.argumen || $.q?.teks;
 
     log(2, $.teks);
-    logPesan(pesan.d, $);
 
     if (Perintah.hasOwnProperty($.perintah)) {
         const msg = {
@@ -272,7 +272,32 @@ function logPesan(d, pesan, bot) {
     if (bot || pesan.uid !== chat) {
         id.push(chalk.hsv(...getColor(chat), 100)(chat));
     }
-    return console.log(new Date().toLocaleDateString(), new Date().toLocaleTimeString(), chalk.cyan(`<${d.toUpperCase()}>`), id.join(':'), pesan.teks);
+    return console.log(
+        new Date().toLocaleDateString(),
+        new Date().toLocaleTimeString(),
+        chalk.cyan(`<${d.toUpperCase()}>`),
+        id.join(':'),
+        chalk.cyan(
+            `[${
+                pesan.gambar
+                    ? 'gambar'
+                    : pesan.stiker
+                    ? 'stiker'
+                    : pesan.video
+                    ? 'video'
+                    : pesan.audio
+                    ? 'audio'
+                    : pesan.lokasi
+                    ? 'lokasi'
+                    : pesan.dokumen
+                    ? 'dokumen'
+                    : pesan.kontak
+                    ? 'kontak'
+                    : ''
+            }]`
+        ),
+        pesan.teks || ''
+    );
 }
 
 ////////////////////
