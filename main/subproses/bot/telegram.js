@@ -3,6 +3,7 @@ const IPC = new utils.IPC('TG', process);
 
 const fs = require('fs/promises');
 const fetch = require('node-fetch');
+const mime = require('mime-types');
 const { Telegraf } = require('telegraf');
 
 const argv = JSON.parse(process.argv[2]);
@@ -36,19 +37,43 @@ bot.on('message', (konteks) => {
         if (teks) _.teks = teks;
 
         if (message?.photo?.length) {
-            _.gambar = `${message.photo.reverse()[0].file_id}|jpg`;
+            _.gambar = {
+                id: message.photo.reverse()[0].file_id,
+                eks: 'jpg',
+                ukuran: message.photo.file_size,
+            };
         } else if (message?.sticker) {
-            if (message.sticker.is_animated) {
-                _.stiker = `${message.sticker.thumb.file_id}|webp`;
-            } else {
-                _.stiker = `${message.sticker.file_id}|webp`;
-            }
+            _.stiker = {
+                id: message.sticker.is_animated ? message.sticker.thumb.file_id : message.sticker.file_id,
+                eks: 'webp',
+                ukuran: message.sticker.file_size,
+            };
         } else if (message?.video) {
-            _.video = `${message.video.file_id}|mp4|${message.video.file_size}`;
+            _.video = {
+                id: message.video.file_id,
+                eks: 'mp4',
+                ukuran: message.video.file_size,
+            };
         } else if (message?.location) {
-            _.lokasi = `${message.location.latitude}|${message.location.longitude}`;
+            _.lokasi = {
+                lat: message.location.latitude,
+                lon: message.location.longitude,
+            };
         } else if (message?.audio) {
-            _.audio = `${message.audio.file_id}|mp3|${message.audio.file_size}`;
+            _.audio = {
+                id: message.audio.file_id,
+                eks: 'mp3',
+                ukuran: message.audio.file_size,
+            };
+        } else if (message?.document) {
+            const eks = message.document.file_name.split('.').reverse()[0] || '';
+            _.dokumen = {
+                id: message.document.file_id,
+                eks: eks,
+                ukuran: message.document.file_size,
+                mimetype: mime.lookup(eks) || undefined,
+                namaFile: message.document.file_name,
+            };
         }
 
         return _;
@@ -78,41 +103,86 @@ async function kirimPesan(pesan) {
     }
 
     try {
-        const $pesan = pesan._;
-        if ($pesan.gambar) {
-            if ($pesan.teks) {
-                const teksAwal = $pesan.teks.length > 1096 ? $pesan.teks.slice(0, 1096) : $pesan.teks,
-                    teksSisa = $pesan.teks.length > 1096 ? $pesan.teks.slice(1096) : '';
-                await bot.telegram.sendPhoto(penerima, { source: $pesan.gambar }, { ...opsi, caption: teksAwal });
+        const $ = pesan._;
+        //////////////////////////////// GAMBAR
+        if ($.gambar) {
+            if ($.teks) {
+                const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
+                    teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
+                if ($.gambar.id) await bot.telegram.sendPhoto(penerima, $.gambar.id, { ...opsi, caption: teksAwal });
+                else if ($.gambar.file) await bot.telegram.sendPhoto(penerima, { source: $.gambar.file }, { ...opsi, caption: teksAwal });
+                else if ($.gambar.url) await bot.telegram.sendPhoto(penerima, { url: $.gambar.url }, { ...opsi, caption: teksAwal });
                 if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
             } else {
-                await bot.telegram.sendPhoto(penerima, { source: $pesan.gambar }, opsi);
+                if ($.gambar.id) await bot.telegram.sendPhoto(penerima, $.gambar.id, opsi);
+                else if ($.gambar.file) await bot.telegram.sendPhoto(penerima, { source: $.gambar.file }, opsi);
+                else if ($.gambar.url) await bot.telegram.sendPhoto(penerima, { url: $.gambar.url }, opsi);
             }
-        } else if ($pesan.video) {
-            if ($pesan.teks) {
-                const teksAwal = $pesan.teks.length > 1096 ? $pesan.teks.slice(0, 1096) : $pesan.teks,
-                    teksSisa = $pesan.teks.length > 1096 ? $pesan.teks.slice(1096) : '';
-                await bot.telegram.sendVideo(penerima, { source: $pesan.video }, { ...opsi, caption: teksAwal });
+        }
+
+        //////////////////////////////// VIDEO
+        else if ($.video) {
+            if ($.teks) {
+                const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
+                    teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
+                if ($.video.id) await bot.telegram.sendVideo(penerima, $.video.id, { ...opsi, caption: teksAwal });
+                else if ($.video.file) await bot.telegram.sendVideo(penerima, { source: $.video.file }, { ...opsi, caption: teksAwal });
+                else if ($.video.url) await bot.telegram.sendVideo(penerima, { url: $.video.url }, { ...opsi, caption: teksAwal });
                 if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
             } else {
-                await bot.telegram.sendVideo(penerima, { source: $pesan.video }, opsi);
+                if ($.video.id) await bot.telegram.sendVideo(penerima, $.video.id, opsi);
+                else if ($.video.file) await bot.telegram.sendVideo(penerima, { source: $.video.file }, opsi);
+                else if ($.video.url) await bot.telegram.sendVideo(penerima, { url: $.video.url }, opsi);
             }
-        } else if ($pesan.stiker) {
-            await bot.telegram.sendSticker(penerima, { source: $pesan.stiker }, opsi);
-        } else if ($pesan.lokasi) {
-            const [latitude, longitude] = $pesan.lokasi.split('|');
-            await bot.telegram.sendLocation(penerima, latitude, longitude, opsi);
-        } else if ($pesan.audio) {
-            if ($pesan.teks) {
-                const teksAwal = $pesan.teks.length > 1096 ? $pesan.teks.slice(0, 1096) : $pesan.teks,
-                    teksSisa = $pesan.teks.length > 1096 ? $pesan.teks.slice(1096) : '';
-                await bot.telegram.sendAudio(penerima, { source: $pesan.audio }, { ...opsi, caption: teksAwal });
+        }
+
+        //////////////////////////////// STIKER
+        else if ($.stiker) {
+            if ($.stiker.id) await bot.telegram.sendSticker(penerima, $.stiker.id, { ...opsi, caption: teksAwal });
+            else if ($.stiker.file) await bot.telegram.sendSticker(penerima, { source: $.stiker.file }, { ...opsi, caption: teksAwal });
+            else if ($.stiker.url) await bot.telegram.sendSticker(penerima, { url: $.stiker.url }, { ...opsi, caption: teksAwal });
+        }
+
+        //////////////////////////////// LOKASI
+        else if ($.lokasi) {
+            await bot.telegram.sendLocation(penerima, $.lokasi.lat, $.lokasi.lon, opsi);
+        }
+
+        //////////////////////////////// AUDIO
+        else if ($.audio) {
+            if ($.teks) {
+                const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
+                    teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
+                if ($.audio.id) await bot.telegram.sendAudio(penerima, $.audio.id, { ...opsi, caption: teksAwal });
+                else if ($.audio.file) await bot.telegram.sendAudio(penerima, { source: $.audio.file }, { ...opsi, caption: teksAwal });
+                else if ($.audio.url) await bot.telegram.sendAudio(penerima, { url: $.video.url }, { ...opsi, caption: teksAwal });
                 if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
             } else {
-                await bot.telegram.sendAudio(penerima, { source: $pesan.audio }, opsi);
+                if ($.audio.id) await bot.telegram.sendAudio(penerima, $.audio.id, opsi);
+                else if ($.audio.file) await bot.telegram.sendAudio(penerima, { source: $.audio.file }, opsi);
+                else if ($.audio.url) await bot.telegram.sendAudio(penerima, { url: $.audio.url }, opsi);
             }
-        } else {
-            await kirimPesanTeks(penerima, $pesan.teks, opsi);
+        }
+
+        //////////////////////////////// DOKUMEN
+        else if ($.dokumen) {
+            if ($.teks) {
+                const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
+                    teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
+                if ($.dokumen.id) await bot.telegram.sendDocument(penerima, $.dokumen.id, { ...opsi, caption: teksAwal });
+                else if ($.dokumen.file) await bot.telegram.sendDocument(penerima, { source: $.dokumen.file }, { ...opsi, caption: teksAwal });
+                else if ($.dokumen.url) await bot.telegram.sendDocument(penerima, { url: $.video.url }, { ...opsi, caption: teksAwal });
+                if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+            } else {
+                if ($.dokumen.id) await bot.telegram.sendDocument(penerima, $.dokumen.id, opsi);
+                else if ($.dokumen.file) await bot.telegram.sendDocument(penerima, { source: $.dokumen.file }, opsi);
+                else if ($.dokumen.url) await bot.telegram.sendDocument(penerima, { url: $.dokumen.url }, opsi);
+            }
+        }
+
+        //////////////////////////////// TEKS
+        else {
+            await kirimPesanTeks(penerima, $.teks, opsi);
         }
         log(5);
         return { s: true };
@@ -123,8 +193,8 @@ async function kirimPesan(pesan) {
     }
 }
 
-async function unduhMedia(mediaStr) {
-    const [file_id, eks] = mediaStr.split('|');
+async function unduhMedia(media) {
+    const [file_id, eks] = [media.id, media.eks];
     const tautan = (await bot.telegram.getFileLink(file_id)).href;
     const f = await fetch(tautan);
     const buffer = await f.buffer();

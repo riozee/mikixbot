@@ -65,20 +65,46 @@ function mulai() {
             function muatPesan(tipe, isi) {
                 const _ = {};
 
-                const teks =
-                    (typeof isi === 'string' ? isi : '') || isi.caption || isi.text || isi.singleSelectReply?.selectedRowId || isi.selectedButtonId || '';
+                const teks = (typeof isi === 'string' ? isi : '') || isi.caption || isi.text || isi.singleSelectReply?.selectedRowId || isi.selectedButtonId || '';
                 if (teks) _.teks = teks;
 
                 if (tipe === 'imageMessage') {
-                    _.gambar = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|image|jpg`;
+                    _.gambar = {
+                        id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|image`,
+                        ukuran: Number(isi.fileLength),
+                        eks: 'jpg',
+                    };
                 } else if (tipe === 'stickerMessage') {
-                    _.stiker = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|sticker|webp`;
+                    _.stiker = {
+                        id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|sticker`,
+                        ukuran: Number(isi.fileLength),
+                        eks: 'webp',
+                    };
                 } else if (tipe === 'videoMessage') {
-                    _.video = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video|mp4|${Number(isi.fileLength)}`;
+                    _.video = {
+                        id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video`,
+                        ukuran: Number(isi.fileLength),
+                        eks: 'mp4',
+                    };
                 } else if (tipe === 'locationMessage' || tipe === 'liveLocationMessage') {
-                    _.lokasi = `${isi.degreesLatitude}|${isi.degreesLongitude}`;
+                    _.lokasi = {
+                        lat: isi.degreesLatitude,
+                        lon: isi.degreesLongitude,
+                    };
                 } else if (tipe === 'audioMessage') {
-                    _.audio = `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|audio|mp3|${Number(isi.fileLength)}`;
+                    _.audio = {
+                        id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|audio`,
+                        ukuran: Number(isi.fileLength),
+                        eks: 'mp3',
+                    };
+                } else if (tipe === 'documentMessage') {
+                    _.dokumen = {
+                        id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|document`,
+                        ukuran: Number(isi.fileLength),
+                        eks: isi.fileName.split('.').reverse()[0],
+                        mimetype: isi.mimetype,
+                        namaFile: isi.fileName,
+                    };
                 }
 
                 return _;
@@ -145,33 +171,79 @@ mulai();
 
 async function kirimPesan(pesan) {
     log(4, pesan);
-    const penerima = ID(pesan._.penerima);
+    const $ = pesan._;
+    const penerima = ID($.penerima);
     let opsi = {};
-    if (pesan._.hasOwnProperty('re')) {
-        opsi.quoted = cache.filter((_pesan) => _pesan.key.id == pesan._.mid)[0];
+    if ($.hasOwnProperty('re')) {
+        opsi.quoted = cache.filter((_pesan) => _pesan.key.id == $.mid)[0];
     }
     try {
         const msg = {};
-        if (pesan._.gambar) {
-            msg.image = { url: pesan._.gambar };
-            msg.caption = pesan._.teks;
-        } else if (pesan._.stiker) {
-            msg.sticker = { url: pesan._.stiker };
-        } else if (pesan._.video) {
-            msg.video = { url: pesan._.video };
-            msg.caption = pesan._.teks;
-        } else if (pesan._.lokasi) {
-            const [latitude, longitude] = pesan._.lokasi.split('|');
-            msg.location = { degreesLatitude: latitude, degreesLongitude: longitude };
-        } else if (pesan._.audio) {
-            if (pesan._.teks) {
-                await bot.sendMessage(penerima, { audio: { url: pesan._.audio } }, opsi);
-                msg.text = pesan._.teks;
+        //////////////////////////////// GAMBAR
+        if ($.gambar) {
+            if ($.gambar.id) msg.image = { url: await unduhMedia($.gambar) };
+            else if ($.gambar.file || $.gambar.url) msg.image = { url: $.gambar.file || $.gambar.url };
+            msg.caption = $.teks;
+        }
+
+        //////////////////////////////// STIKER
+        else if ($.stiker) {
+            if ($.stiker.id) msg.sticker = { url: await unduhMedia($.stiker) };
+            else if ($.stiker.file || $.stiker.url) msg.sticker = { url: $.stiker.file || $.stiker.url };
+        }
+
+        //////////////////////////////// VIDEO
+        else if ($.video) {
+            if ($.video.id) msg.video = { url: await unduhMedia($.video) };
+            else if ($.video.file || $.video.url) msg.video = { url: $.video.file || $.video.url };
+            msg.caption = $.teks;
+        }
+
+        //////////////////////////////// LOKASI
+        else if ($.lokasi) {
+            msg.location = { degreesLatitude: $.lokasi.lat, degreesLongitude: $.lokasi.lon };
+        }
+
+        //////////////////////////////// AUDIO
+        else if ($.audio) {
+            if ($.teks) {
+                if ($.audio.id) await bot.sendMessage(penerima, { audio: { url: await unduhMedia($.audio) } }, opsi);
+                else if ($.audio.file || $.audio.url) await bot.sendMessage(penerima, { audio: { url: $.audio.file || $.audio.url } }, opsi);
+                msg.text = $.teks;
             } else {
-                msg.audio = { url: pesan._.audio };
+                if ($.audio.id) msg.audio = { url: await unduhMedia($.audio) };
+                else if ($.audio.file || $.audio.url) msg.audio = { url: $.audio.file || $.audio.url };
             }
-        } else {
-            msg.text = pesan._.teks;
+        }
+
+        //////////////////////////////// DOKUMEN
+        else if ($.dokumen) {
+            if ($.teks) {
+                if ($.dokumen.id)
+                    await bot.sendMessage(penerima, { document: { url: await unduhMedia($.dokumen) }, mimetype: $.dokumen.mimetype, fileName: $.dokumen.namaFile }, opsi);
+                else if ($.dokumen.file || $.dokumen.url)
+                    await bot.sendMessage(
+                        penerima,
+                        { document: { url: $.dokumen.file || $.dokumen.url }, mimetype: $.dokumen.mimetype, fileName: $.dokumen.namaFile },
+                        opsi
+                    );
+                msg.text = $.teks;
+            } else {
+                if ($.dokumen.id) {
+                    msg.document = { url: await unduhMedia($.dokumen) };
+                    msg.mimetype = $.dokumen.mimetype;
+                    msg.fileName = $.dokumen.namaFile;
+                } else if ($.dokumen.file || $.dokumen.url) {
+                    msg.document = { url: $.dokumen.file || $.dokumen.url };
+                    msg.mimetype = $.dokumen.mimetype;
+                    msg.fileName = $.dokumen.namaFile;
+                }
+            }
+        }
+
+        //////////////////////////////// TEKS
+        else {
+            msg.text = $.teks;
         }
         await bot.sendMessage(penerima, msg, opsi);
         log(5);
@@ -183,8 +255,9 @@ async function kirimPesan(pesan) {
     }
 }
 
-async function unduhMedia(mediaStr) {
-    let [mediaKey, directPath, url, type, ext] = mediaStr.split('|');
+async function unduhMedia(media) {
+    let [mediaKey, directPath, url, type] = media.id.split('|');
+    let ext = media.eks;
     mediaKey = Uint8Array.from(mediaKey.split(','));
     const stream = await downloadContentFromMessage({ mediaKey, directPath, url }, type);
     let buffer = Buffer.from([]);
