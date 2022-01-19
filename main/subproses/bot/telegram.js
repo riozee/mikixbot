@@ -73,7 +73,7 @@ bot.on('message', (konteks) => {
                 eks: 'mp3',
                 ukuran: message.audio.file_size,
             };
-        } else if (message?.document) {
+        } else if (message?.document && !message?.animation) {
             const eks = message.document.file_name.split('.').reverse()[0] || '';
             _.dokumen = {
                 id: message.document.file_id,
@@ -89,6 +89,13 @@ bot.on('message', (konteks) => {
                     nomor: message.contact.phone_number,
                 },
             ];
+        } else if (message?.animation) {
+            _.video = {
+                id: message.animation.file_id,
+                eks: 'mp4',
+                ukuran: message.animation.file_size,
+                gif: true,
+            };
         }
 
         return _;
@@ -137,7 +144,20 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// VIDEO
         else if ($.video) {
-            if ($.video.tg_video_note) {
+            if ($.video.gif) {
+                if ($.teks) {
+                    const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
+                        teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
+                    if ($.video.id) await bot.telegram.sendAnimation(penerima, $.video.id, { ...opsi, caption: teksAwal });
+                    else if ($.video.file) await bot.telegram.sendAnimation(penerima, { source: $.video.file }, { ...opsi, caption: teksAwal });
+                    else if ($.video.url) await bot.telegram.sendAnimation(penerima, { url: $.video.url }, { ...opsi, caption: teksAwal });
+                    if (teksSisa) await kirimPesanTeks(penerima, teksSisa, opsi);
+                } else {
+                    if ($.video.id) await bot.telegram.sendAnimation(penerima, $.video.id, opsi);
+                    else if ($.video.file) await bot.telegram.sendAnimation(penerima, { source: $.video.file }, opsi);
+                    else if ($.video.url) await bot.telegram.sendAnimation(penerima, { url: $.video.url }, opsi);
+                }
+            } else if ($.video.tg_video_note) {
                 if ($.teks) {
                     const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
                         teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';

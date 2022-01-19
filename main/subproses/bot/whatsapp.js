@@ -86,6 +86,7 @@ function mulai() {
                         id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video`,
                         ukuran: Number(isi.fileLength),
                         eks: 'mp4',
+                        gif: isi.gifPlayback,
                     };
                 } else if (tipe === 'locationMessage' || tipe === 'liveLocationMessage') {
                     _.lokasi = {
@@ -240,6 +241,7 @@ async function kirimPesan(pesan) {
             else if ($.video.file || $.video.url) msg.video = { url: $.video.file || $.video.url };
             msg.caption = $.teks;
             if ($.video.wa_view_once) msg.viewOnce = true;
+            if ($.video.gif) msg.gifPlayback = true;
         }
 
         //////////////////////////////// LOKASI
