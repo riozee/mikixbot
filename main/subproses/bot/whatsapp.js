@@ -121,6 +121,24 @@ function mulai() {
                             nomor: kontak.vcard.match(/TEL.*:([\+\(\)\-\. \d]+)/)?.[1],
                         });
                     });
+                } else if (tipe === 'viewOnceMessage') {
+                    tipe = Object.keys(isi.message)[0];
+                    isi = isi.message[tipe];
+                    if (tipe === 'imageMessage') {
+                        _.gambar = {
+                            id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|image`,
+                            ukuran: Number(isi.fileLength),
+                            eks: 'jpg',
+                            wa_view_once: true,
+                        };
+                    } else if (tipe === 'videoMessage') {
+                        _.video = {
+                            id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video`,
+                            ukuran: Number(isi.fileLength),
+                            eks: 'mp4',
+                            wa_view_once: true,
+                        };
+                    }
                 }
 
                 return _;
@@ -205,6 +223,7 @@ async function kirimPesan(pesan) {
             if ($.gambar.id) msg.image = { url: await unduhMedia($.gambar) };
             else if ($.gambar.file || $.gambar.url) msg.image = { url: $.gambar.file || $.gambar.url };
             msg.caption = $.teks;
+            if ($.gambar.wa_view_once) msg.viewOnce = true;
         }
 
         //////////////////////////////// STIKER
@@ -218,6 +237,7 @@ async function kirimPesan(pesan) {
             if ($.video.id) msg.video = { url: await unduhMedia($.video) };
             else if ($.video.file || $.video.url) msg.video = { url: $.video.file || $.video.url };
             msg.caption = $.teks;
+            if ($.video.wa_view_once) msg.viewOnce = true;
         }
 
         //////////////////////////////// LOKASI
