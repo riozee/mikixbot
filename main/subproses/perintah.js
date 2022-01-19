@@ -109,7 +109,7 @@ const Perintah = {
             };
         }
     },
-    help: () => Perintah.menu(),
+    help: ($) => Perintah.menu($),
     kbbi: async ($) => {
         if ($.arg) {
             try {

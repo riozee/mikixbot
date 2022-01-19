@@ -23,7 +23,6 @@ Cara program ini bekerja adalah dengan menggunakan komunikasi antarproses (IPC).
 > Memori:\
 > `database.js`\
 > Indera & anggota gerak:\
-> `web.js`\
 > `telegram.js`\
 > `whatsapp.js`\
 > \
@@ -49,6 +48,8 @@ Cara program ini bekerja adalah dengan menggunakan komunikasi antarproses (IPC).
 
 -   nodejs
 -   ffmpeg
+-   imagemagick
+-   webpmux
 
 &nbsp;
 
@@ -60,8 +61,8 @@ node ./main/main.js [...argumen]
 
 Argumen-argumen:
 
--   `--s=[subproses1],[subproses2],[subproses3]`\
-    Subproses yang akan dijalankan (`perintah.js` dan `database.js` dijalankan secara otomatis).
+-   `--s=[bot1],[bot2],[bot3]`\
+    Bot yang akan dijalankan.
 -   `--deflang=[LANGCODE]`\
     Mengatur kode bahasa default pada pengguna yang belum mengatur bahasa.
 -   `--dev`\
@@ -146,4 +147,4 @@ Ada 4 operasi utama dalam mengakses database:
 ## About
 
 Start date: December 28th, 2021.\
-Launch date: Later.
+Launch date: Soon.
