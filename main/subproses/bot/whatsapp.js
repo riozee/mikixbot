@@ -150,6 +150,7 @@ function mulai() {
                     ...$pesan,
                     ...muatPesan(tipe, isi),
                 };
+                if (isi.contextInfo?.expiration) $pesan.wa_disappearing_message = isi.contextInfo.expiration;
 
                 if (isi.contextInfo?.quotedMessage) {
                     for (const tipe in isi.contextInfo.quotedMessage) {
@@ -213,11 +214,12 @@ async function kirimPesan(pesan) {
     const $ = pesan._;
     const penerima = ID($.penerima);
     let opsi = {};
-    if ($.hasOwnProperty('re')) {
-        opsi.quoted = cache.filter((_pesan) => _pesan.key.id == $.mid)[0];
-    }
+    if ($.hasOwnProperty('re')) opsi.quoted = cache.filter((_pesan) => _pesan.key.id == $.mid)[0];
+    if ($.wa_disappearing_message) opsi.ephemeralExpiration = $.wa_disappearing_message;
+
     try {
         const msg = {};
+
         //////////////////////////////// GAMBAR
         if ($.gambar) {
             if ($.gambar.id) msg.image = { url: await unduhMedia($.gambar) };
