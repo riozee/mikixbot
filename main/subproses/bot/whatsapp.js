@@ -146,6 +146,9 @@ function mulai() {
             }
 
             for (const tipe in pesan.message) {
+                if (tipe === 'senderKeyDistributionMessage') continue;
+                if (tipe === 'messageContextInfo') continue;
+
                 const isi = pesan.message[tipe];
                 $pesan = {
                     ...$pesan,
