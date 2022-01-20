@@ -61,7 +61,6 @@ function mulai() {
                 uid: IDPengguna(uid),
                 mid: pesan.key.id,
             };
-            const $pesanLain = [];
 
             function muatPesan(tipe, isi) {
                 const _ = {};
@@ -181,11 +180,6 @@ function mulai() {
                 `${pesan.key.id}`
             );
             IPC.kirimSinyal('PR', $pesan);
-            if ($pesanLain.length) {
-                for (const $$pesan of $pesanLain) {
-                    IPC.kirimSinyal('PR', $$pesan);
-                }
-            }
         } catch (eror) {
             log(7);
             console.error(eror);
