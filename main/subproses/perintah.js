@@ -116,15 +116,104 @@ async function anch(pesan, data) {
             }
         }
 
-        const msg = {
+        let msg = {
             anch: {
                 roomID: roomID,
             },
             re: $.q ? room.chat.filter((v) => v.includes($.q.mid))[0]?.filter?.((v) => v !== $.q.mid)?.[0] : undefined,
         };
 
-        if ($.teks) {
-            msg.teks = $.teks;
+        ////////////////////
+        if ($.uid.startsWith('WA')) {
+            if (partner.startsWith('WA')) {
+                msg.copy = {
+                    roomID: roomID,
+                    msgID: $.mid,
+                };
+            } else if (partner.startsWith('TG')) {
+                if ($.gambar) {
+                    const file = await IPC.kirimKueri('WA', { unduh: $.gambar });
+                    msg.gambar = { file: file.file };
+                    msg.teks = $.teks;
+                } else if ($.video) {
+                    const file = await IPC.kirimKueri('WA', { unduh: $.video });
+                    msg.video = { file: file.file };
+                    msg.teks = $.teks;
+                } else if ($.stiker) {
+                    const file = await IPC.kirimKueri('WA', { unduh: $.stiker });
+                    if ($.stiker.animasi) {
+                        const gif = await webp.keGif(file.file);
+                        msg.video = {
+                            file: gif,
+                            gif: true,
+                        };
+                    } else {
+                        msg.stiker = { file: file.file };
+                    }
+                } else if ($.lokasi) {
+                    msg.lokasi = $.lokasi;
+                } else if ($.audio) {
+                    const file = await IPC.kirimKueri('WA', { unduh: $.audio });
+                    msg.audio = { file: file.file };
+                } else if ($.dokumen) {
+                    const file = await IPC.kirimKueri('WA', { unduh: $.dokumen });
+                    msg.dokumen = { file: file.file, mimetype: $.dokumen.mimetype, namaFile: $.dokumen.namaFile };
+                    msg.teks = `[[ ${$.dokumen.namaFile} ]]`;
+                } else if ($.kontak) {
+                    msg.kontak = $.kontak;
+                } else {
+                    if ($.teks) {
+                        msg.teks = $.teks;
+                    } else {
+                        msg.teks = TEKS[$.bahasa]['anonymouschat/messagenotsupported'];
+                    }
+                }
+            }
+        }
+
+        ////////////////////
+        else if ($.uid.startsWith('TG')) {
+            if (partner.startsWith('TG')) {
+                msg.copy = {
+                    from: $.uid,
+                    mid: $.mid,
+                };
+            } else if (partner.startsWith('WA')) {
+                if ($.gambar) {
+                    const file = await IPC.kirimKueri('TG', { unduh: $.gambar });
+                    msg.gambar = { file: file.file };
+                    msg.teks = $.teks;
+                } else if ($.video) {
+                    const file = await IPC.kirimKueri('TG', { unduh: $.video });
+                    msg.video = { file: file.file };
+                    msg.teks = $.teks;
+                } else if ($.stiker) {
+                    const file = await IPC.kirimKueri('TG', { unduh: $.stiker });
+                    msg.stiker = { file: file.file };
+                } else if ($.lokasi) {
+                    msg.lokasi = $.lokasi;
+                } else if ($.audio) {
+                    const file = await IPC.kirimKueri('TG', { unduh: $.audio });
+                    msg.audio = { file: file.file };
+                    msg.teks = $.teks;
+                } else if ($.dokumen) {
+                    const file = await IPC.kirimKueri('TG', { unduh: $.dokumen });
+                    msg.dokumen = {
+                        file: file.file,
+                        mimetype: $.dokumen.mimetype,
+                        namaFile: $.dokumen.namaFile,
+                    };
+                    msg.teks = $.teks;
+                } else if ($.kontak) {
+                    msg.kontak = $.kontak;
+                } else {
+                    if ($.teks) {
+                        msg.teks = $.teks;
+                    } else {
+                        msg.teks = TEKS[$.bahasa]['anonymouschat/messagenotsupported'];
+                    }
+                }
+            }
         }
 
         const terkirim = await _kirimPesan(partner, msg);

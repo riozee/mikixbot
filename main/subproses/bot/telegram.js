@@ -48,6 +48,7 @@ bot.on('message', (konteks) => {
                 id: message.sticker.is_animated ? message.sticker.thumb.file_id : message.sticker.file_id,
                 eks: 'webp',
                 ukuran: message.sticker.file_size,
+                animasi: message.sticker.is_animated,
             };
         } else if (message?.video) {
             _.video = {
@@ -194,9 +195,9 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// STIKER
         else if ($.stiker) {
-            if ($.stiker.id) m = await bot.telegram.sendSticker(penerima, $.stiker.id, { ...opsi, caption: teksAwal });
-            else if ($.stiker.file) m = await bot.telegram.sendSticker(penerima, { source: $.stiker.file }, { ...opsi, caption: teksAwal });
-            else if ($.stiker.url) m = await bot.telegram.sendSticker(penerima, { url: $.stiker.url }, { ...opsi, caption: teksAwal });
+            if ($.stiker.id) m = await bot.telegram.sendSticker(penerima, $.stiker.id, { ...opsi });
+            else if ($.stiker.file) m = await bot.telegram.sendSticker(penerima, { source: $.stiker.file }, { ...opsi });
+            else if ($.stiker.url) m = await bot.telegram.sendSticker(penerima, { url: $.stiker.url }, { ...opsi });
         }
 
         //////////////////////////////// LOKASI
@@ -222,6 +223,7 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// DOKUMEN
         else if ($.dokumen) {
+            opsi.file_name = $.namaFile || undefined;
             if ($.teks) {
                 const teksAwal = $.teks.length > 1096 ? $.teks.slice(0, 1096) : $.teks,
                     teksSisa = $.teks.length > 1096 ? $.teks.slice(1096) : '';
@@ -238,12 +240,23 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// KONTAK
         else if ($.kontak) {
+            ids = [];
             for await (const kntk of $.kontak) {
-                m = await bot.telegram.sendContact(penerima, kntk.nomor, kntk.nama, {
-                    ...opsi,
-                    vcard: `BEGIN:VCARD\nVERSION:2.1\nFN:${kntk.nama}\nTEL;CELL:${kntk.nomor}\nEND:VCARD`,
-                });
+                const nomor = kntk.nomor || kntk.nama.replace(/\D+/g, '') || '000000000000';
+                ids.push(
+                    (
+                        await bot.telegram.sendContact(penerima, nomor, kntk.nama, {
+                            ...opsi,
+                            vcard: `BEGIN:VCARD\nVERSION:2.1\nFN:${kntk.nama}\nTEL;CELL:${nomor}\nEND:VCARD`,
+                        })
+                    ).message_id
+                );
             }
+        }
+
+        //////////////////////////////// ANONYMOUS CHAT FORWARD MESSAGE
+        else if ($.copy) {
+            m = await bot.telegram.copyMessage(penerima, ID($.copy.from), $.copy.mid, opsi);
         }
 
         //////////////////////////////// TEKS

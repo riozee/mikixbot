@@ -6,9 +6,6 @@ const fs = require('fs');
 
 const argv = JSON.parse(process.argv[2]);
 
-// "fix" this.isZero error
-require('long').prototype.toString = () => '';
-
 const cache = {
     msg: [],
 };
@@ -89,6 +86,7 @@ function mulai() {
                         id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|sticker`,
                         ukuran: Number(isi.fileLength),
                         eks: 'webp',
+                        animasi: isi.isAnimated,
                     };
                 } else if (tipe === 'videoMessage') {
                     _.video = {
@@ -157,6 +155,7 @@ function mulai() {
             for (const tipe in pesan.message) {
                 if (tipe === 'senderKeyDistributionMessage') continue;
                 if (tipe === 'messageContextInfo') continue;
+                if (tipe === 'protocolMessage') continue;
 
                 const isi = pesan.message[tipe];
                 $pesan = {
@@ -235,6 +234,7 @@ async function kirimPesan(pesan) {
 
     try {
         const msg = {};
+        let omsg;
 
         //////////////////////////////// GAMBAR
         if ($.gambar) {
@@ -267,8 +267,8 @@ async function kirimPesan(pesan) {
         //////////////////////////////// AUDIO
         else if ($.audio) {
             if ($.teks) {
-                if ($.audio.id) await bot.sendMessage(penerima, { audio: { url: await unduhMedia($.audio) } }, opsi);
-                else if ($.audio.file || $.audio.url) await bot.sendMessage(penerima, { audio: { url: $.audio.file || $.audio.url } }, opsi);
+                if ($.audio.id) omsg = await bot.sendMessage(penerima, { audio: { url: await unduhMedia($.audio) } }, opsi);
+                else if ($.audio.file || $.audio.url) omsg = await bot.sendMessage(penerima, { audio: { url: $.audio.file || $.audio.url } }, opsi);
                 msg.text = $.teks;
             } else {
                 if ($.audio.id) msg.audio = { url: await unduhMedia($.audio) };
@@ -280,9 +280,13 @@ async function kirimPesan(pesan) {
         else if ($.dokumen) {
             if ($.teks) {
                 if ($.dokumen.id)
-                    await bot.sendMessage(penerima, { document: { url: await unduhMedia($.dokumen) }, mimetype: $.dokumen.mimetype, fileName: $.dokumen.namaFile }, opsi);
+                    omsg = await bot.sendMessage(
+                        penerima,
+                        { document: { url: await unduhMedia($.dokumen) }, mimetype: $.dokumen.mimetype, fileName: $.dokumen.namaFile },
+                        opsi
+                    );
                 else if ($.dokumen.file || $.dokumen.url)
-                    await bot.sendMessage(
+                    omsg = await bot.sendMessage(
                         penerima,
                         { document: { url: $.dokumen.file || $.dokumen.url }, mimetype: $.dokumen.mimetype, fileName: $.dokumen.namaFile },
                         opsi
@@ -305,13 +309,36 @@ async function kirimPesan(pesan) {
         else if ($.kontak) {
             const kontak = [];
             for await (const kntk of $.kontak) {
-                const diWA = (await bot.onWhatsApp(kntk.nomor.replace(/\D+/g, '')))?.[0]?.exists;
+                const diWA = (await bot.onWhatsApp(kntk.nomor?.replace?.(/\D+/g, '')))?.[0]?.exists;
                 kontak.push({
                     displayName: kntk.nama,
-                    vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${kntk.nama}\nTEL${diWA ? `;waid=${kntk.nomor.replace(/\D+/g, '')}` : ''}:${kntk.nomor}\nEND:VCARD`,
+                    vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${kntk.nama}\nTEL${diWA ? `;waid=${kntk.nomor?.replace?.(/\D+/g, '')}` : ''}:${
+                        kntk.nomor || '000000000000'
+                    }\nEND:VCARD`,
                 });
             }
             msg.contacts = { contacts: kontak };
+        }
+
+        //////////////////////////////// ANONYMOUS CHAT FORWARD MESSAGE
+        else if ($.copy) {
+            const _msg = cache.anch[$.copy.roomID][$.copy.msgID];
+            const fmsg = generateForwardMessageContent(_msg);
+            for (const tipe in fmsg) {
+                if (tipe === 'senderKeyDistributionMessage') continue;
+                if (tipe === 'messageContextInfo') continue;
+                if (tipe === 'protocolMessage') continue;
+                fmsg[tipe].contextInfo = {};
+                break;
+            }
+            const cmsg = generateWAMessageFromContent(penerima, fmsg, opsi);
+            await bot.relayMessage(penerima, cmsg.message, { messageId: cmsg.key.id });
+            if ($.anch) {
+                if (!cache.anch[$.anch.roomID]) cache.anch[$.anch.roomID] = {};
+                cache.anch[$.anch.roomID][cmsg.key.id] = cmsg;
+            }
+            log(5);
+            return { s: true, mid: cmsg.key.id };
         }
 
         //////////////////////////////// TEKS
@@ -322,9 +349,10 @@ async function kirimPesan(pesan) {
         if ($.anch) {
             if (!cache.anch[$.anch.roomID]) cache.anch[$.anch.roomID] = {};
             cache.anch[$.anch.roomID][terkirim.key.id] = terkirim;
+            if (omsg?.key?.id) cache.anch[$.anch.roomID][omsg.key.id] = omsg;
         }
         log(5);
-        return { s: true, mid: terkirim.key.id };
+        return { s: true, mid: [omsg?.key?.id, terkirim.key.id].filter(Boolean) };
     } catch (e) {
         log(6);
         console.error(e);
@@ -370,7 +398,7 @@ process.on('message', (pesan) => {
                 if (!cache.anch[roomID]) cache.anch[roomID] = {};
                 cache.anch[roomID][msgID] = msg;
             } else if (pesan._.anch.hasOwnProperty('delRoomID')) {
-                const roomID = pesan._.anch.roomID;
+                const roomID = pesan._.anch.delRoomID;
                 if (cache.anch) delete cache.anch[roomID];
             }
         }
@@ -430,3 +458,6 @@ if (argv.watch) {
         process.exit();
     });
 }
+
+// "fix" this.isZero error
+require('long').prototype.toString = () => String(Date.now());
