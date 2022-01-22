@@ -218,10 +218,14 @@ async function anch(pesan, data) {
 
         const terkirim = await _kirimPesan(partner, msg);
 
-        if (Array.isArray(terkirim.mid)) {
-            terkirim.mid.forEach((mid) => room.chat.push([$.mid, mid]));
+        if (terkirim.s) {
+            if (Array.isArray(terkirim.mid)) {
+                terkirim.mid.forEach((mid) => room.chat.push([$.mid, mid]));
+            } else {
+                room.chat.push([$.mid, terkirim.mid]);
+            }
         } else {
-            room.chat.push([$.mid, terkirim.mid]);
+            kirimPesan($.uid, TEKS[$.bahasa]['anonymouschat/sendingfailed']);
         }
         break;
     }

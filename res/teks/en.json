@@ -1,9 +1,11 @@
 {
 	"anonymouschat/findingpartner": "Looking for a partner...\n\n/astop => cancel the search",
 	"anonymouschat/findingpartnercancelled": "Finding partner cancelled.",
+	"anonymouschat/messagenotsupported": "[[ Your partner sent a message that is not compatible with the app you are using. ]]",
 	"anonymouschat/notinanyroom": "You are not in an Anonymous Chat session.\n\n/asearch => find a new partner",
 	"anonymouschat/partnerfound": "Partner found!\n\n/anext => find a new partner\n/astop => stop",
 	"anonymouschat/partnerstoppeddialog": "Your partner has stopped the conversation.\n\n/asearch => find a new partner",
+	"anonymouschat/sendingfailed": "[[ Failed to forward the message to partner. Please try again. ]]",
 	"anonymouschat/stoppingdialog": "You have stopped the conversation.\n\n/asearch => find a new partner",
 	"command/about": "Miki Bot is a multi-platform chatbot that runs concurrently on several different platforms.\n\nTELEGRAM t.me/mikixbot\nWHATSAPP wa.me/14013580123\n\nThis bot is still in development stage. Bots are subject to change at any time without notice.\n\n© RiozeC (2021)",
 	"command/eval/noargs": "/eval [javascript_code]\n\nEnter text to [javascript_code]",

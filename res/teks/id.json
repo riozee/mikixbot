@@ -1,9 +1,11 @@
 {
 	"anonymouschat/findingpartner": "Mencari partner...\n\n/astop => batalkan pencarian",
 	"anonymouschat/findingpartnercancelled": "Mencari partner dibatalkan.",
+	"anonymouschat/messagenotsupported": "[[ Partner Anda mengirimkan pesan yang tidak kompatibel dengan aplikasi yang Anda gunakan. ]]",
 	"anonymouschat/notinanyroom": "Kamu sedang tidak berada dalam sesi Anonymous Chat.\n\n/asearch => mencari partner baru",
 	"anonymouschat/partnerfound": "Partner ditemukan!\n\n/anext => mencari partner baru\n/astop => berhenti",
 	"anonymouschat/partnerstoppeddialog": "Partner kamu telah menghentikan percakapan.\n\n/asearch => mencari partner baru",
+	"anonymouschat/sendingfailed": "[[ Gagal meneruskan pesan tersebut ke partner. Silakan coba lagi. ]]",
 	"anonymouschat/stoppingdialog": "Kamu telah menghentikan percakapan.\n\n/asearch => mencari partner baru",
 	"command/about": "Miki Bot adalah chatbot multi-platform yang berjalan bersamaan di beberapa platform yang berbeda.\n\nTELEGRAM t.me/mikixbot\nWHATSAPP wa.me/14013580123\n\nBot ini masih tahap pengembangan. Bot dapat berubah setiap saat tanpa pemberitahuan.\n\n© RiozeC (2021)",
 	"command/eval/noargs": "/eval [kode_javascript]\n\nMasukkan teks ke [kode_javascript]",
