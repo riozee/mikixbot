@@ -1,4 +1,10 @@
 {
+	"anonymouschat/findingpartner": "Mencari partner...\n\n/astop => batalkan pencarian",
+	"anonymouschat/findingpartnercancelled": "Mencari partner dibatalkan.",
+	"anonymouschat/notinanyroom": "Kamu sedang tidak berada dalam sesi Anonymous Chat.\n\n/asearch => mencari partner baru",
+	"anonymouschat/partnerfound": "Partner ditemukan!\n\n/anext => mencari partner baru\n/astop => berhenti",
+	"anonymouschat/partnerstoppeddialog": "Partner kamu telah menghentikan percakapan.\n\n/asearch => mencari partner baru",
+	"anonymouschat/stoppingdialog": "Kamu telah menghentikan percakapan.\n\n/asearch => mencari partner baru",
 	"command/about": "Miki Bot adalah chatbot multi-platform yang berjalan bersamaan di beberapa platform yang berbeda.\n\nTELEGRAM t.me/mikixbot\nWHATSAPP wa.me/14013580123\n\nBot ini masih tahap pengembangan. Bot dapat berubah setiap saat tanpa pemberitahuan.\n\n© RiozeC (2021)",
 	"command/eval/noargs": "/eval [kode_javascript]\n\nMasukkan teks ke [kode_javascript]",
 	"command/kbbi/$words": "Antonim | Gabungan kata | Kata turunan | Arti | Peribahasa | Terkait | Lihat juga | Sinonim | Translasi",
@@ -8,6 +14,7 @@
 	"command/menu": "Dokumentasi lengkap semua perintah Miki Bot: https://riozec.github.io/mikibot\n\n%",
 	"command/reversetext/noargs": "/reversetext [teks]\n\nMasukkan teks ke [teks]",
 	"command/uppercase/noargs": "/uppercase [teks]\n\nMasukkan teks ke dalam [teks]",
-	"permission/onlydev": "Perintah ini hanya dapat dijalankan oleh developer.",
+	"permission/devonly": "Perintah ini hanya dapat dijalankan oleh developer.",
+	"permission/privateonly": "Fitur ini hanya dapat digunakan di chat pribadi.",
 	"system/error": "Terjadi kesalahan."
 }

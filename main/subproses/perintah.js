@@ -24,26 +24,91 @@ const cache = {
     colors: {},
 };
 
+if (!fs.existsSync('./data/tmpdb.json')) fs.writeFileSync('./data/tmpdb.json', '{}');
+cache.data = JSON.parse(fs.readFileSync('./data/tmpdb.json'));
+setInterval(() => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.data)), 60000);
+
 //////////////////// UTAMA
 
 async function proses(pesan) {
     log(1, pesan);
     logPesan(pesan.d, pesan._);
+    const data = {
+        c: await DB.cari({ _id: pesan._.pengirim }),
+        u: pesan._.pengirim !== pesan._.uid ? DB.cari({ _id: pesan._.uid }) : null,
+    };
 
-    if (pesan._.teks) {
+    pesan._.bahasa = data.c?.lang || 'en';
+
+    if (!pesan._.pengirim.endsWith('#C') && cache.data.anch?.active?.includes?.(pesan._.uid)) {
+        anch(pesan, data);
+    } else if (pesan._.teks) {
         if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test(pesan._.teks)) {
-            perintah(pesan);
+            perintah(pesan, data);
         } else {
             log(3, pesan._.teks);
         }
     }
 }
 
+//////////////////// ANONYMOUS CHAT
+
+async function anch(pesan, data) {
+    const $ = pesan._;
+    for (const roomID in cache.data.anch.room) {
+        const room = cache.data.anch.room[roomID];
+        const partner = room[$.uid];
+        if (!partner) continue;
+
+        if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test($.teks)) {
+            const cmd = $.teks.slice(1).toLowerCase();
+            console.log(cmd);
+            if (cmd === 'anext') {
+                delete cache.data.anch.room[roomID];
+                _.pull(cache.data.anch.active, $.uid, partner);
+                kirimPesan(partner, { teks: TEKS[$.bahasa]['anonymouschat/partnerstoppeddialog'] });
+                if (cache.data.anch.ready?.length) {
+                    const partnerID = _.sample(cache.data.anch.ready);
+                    _.pull(cache.data.anch.ready, partnerID);
+                    const newRoomID = Math.random().toString(36).slice(2);
+                    cache.data.anch.room[newRoomID] = {
+                        [$.uid]: partnerID,
+                        [partnerID]: $.uid,
+                    };
+                    cache.data.anch.active.push($.uid, partnerID);
+                    kirimPesan(partnerID, { teks: TEKS[$.bahasa]['anonymouschat/partnerfound'] });
+                    kirimPesan($.uid, { teks: TEKS[$.bahasa]['anonymouschat/partnerfound'] });
+                } else {
+                    if (!cache.data.anch.ready) cache.data.anch.ready = [];
+                    cache.data.anch.ready.push($.uid);
+                    kirimPesan($.uid, { teks: TEKS[$.bahasa]['anonymouschat/findingpartner'] });
+                }
+                return;
+            } else if (cmd === 'astop') {
+                delete cache.data.anch.room[roomID];
+                _.pull(cache.data.anch.active, $.uid, partner);
+                kirimPesan($.uid, { teks: TEKS[$.bahasa]['anonymouschat/stoppingdialog'] });
+                kirimPesan(partner, { teks: TEKS[$.bahasa]['anonymouschat/partnerstoppeddialog'] });
+                return;
+            }
+        }
+
+        const msg = {};
+
+        if ($.teks) {
+            msg.teks = $.teks;
+        }
+
+        kirimPesan(partner, msg);
+
+        break;
+    }
+}
+
 //////////////////// PERINTAH-PERINTAH
 
-async function perintah(pesan) {
+async function perintah(pesan, data) {
     const $ = pesan._;
-    $.bahasa = 'id';
     const _perintah = $.teks.split(/\s+/)[0];
 
     $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
@@ -61,7 +126,7 @@ async function perintah(pesan) {
         try {
             const hasil = {
                 ...msg,
-                ...(await Perintah[$.perintah]($)),
+                ...(await Perintah[$.perintah]($, data)),
             };
             log(5, hasil);
             logPesan(pesan.d, hasil, true);
@@ -87,10 +152,42 @@ const Perintah = {
             teks: TEKS[$.bahasa]['command/about'],
         };
     },
+    anext: ($) => {
+        return { teks: TEKS[$.bahasa]['anonymouschat/notinanyroom'] };
+    },
+    asearch: async ($, data) => {
+        if ($.pengirim.endsWith('#C')) return { teks: TEKS[$.bahasa]['permission/privateonly'] };
+        if (cache.data.anch?.ready?.length) {
+            const partnerID = _.sample(cache.data.anch.ready);
+            _.pull(cache.data.anch.ready, partnerID);
+            const roomID = Math.random().toString(36).slice(2);
+            if (!cache.data.anch.room) cache.data.anch.room = {};
+            cache.data.anch.room[roomID] = {
+                [$.uid]: partnerID,
+                [partnerID]: $.uid,
+            };
+            if (!cache.data.anch.active) cache.data.anch.active = [];
+            cache.data.anch.active.push($.uid, partnerID);
+            kirimPesan(partnerID, { teks: TEKS[$.bahasa]['anonymouschat/partnerfound'] });
+            return { teks: TEKS[$.bahasa]['anonymouschat/partnerfound'] };
+        } else {
+            if (!cache.data.anch) cache.data.anch = {};
+            if (!cache.data.anch.ready) cache.data.anch.ready = [];
+            cache.data.anch.ready.push($.uid);
+            return { teks: TEKS[$.bahasa]['anonymouschat/findingpartner'] };
+        }
+    },
+    astop: ($) => {
+        if (cache.data.anch?.ready?.includes?.($.uid)) {
+            _.pull(cache.data.anch.ready, $.uid);
+            return { teks: TEKS[$.bahasa]['anonymouschat/findingpartnercancelled'] };
+        }
+        return { teks: TEKS[$.bahasa]['anonymouschat/notinanyroom'] };
+    },
     eval: async ($) => {
         if (!cekDev($.uid)) {
             return {
-                teks: TEKS[$.bahasa]['permission/onlydev'],
+                teks: TEKS[$.bahasa]['permission/devonly'],
             };
         }
         if (!$.argumen) {
@@ -229,6 +326,13 @@ const Perintah = {
 
 //////////////////// FUNGSI PEMBANTU
 
+function kirimPesan(penerima, pesan) {
+    return IPC.kirimSinyal(penerima.split('#')[0], {
+        penerima: penerima,
+        ...pesan,
+    });
+}
+
 function cekDev(id) {
     id = id.replace(/^[A-Z]{2,3}#/, '');
     for (const devId of argv.devids.split(',')) {
@@ -309,6 +413,8 @@ process.on('message', async (pesan) => {
         }
     }
 });
+
+process.on('exit', () => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.data)));
 
 function log(kode, ...argumen2) {
     if (!argv.dev) return;

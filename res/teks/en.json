@@ -1,4 +1,10 @@
 {
+	"anonymouschat/findingpartner": "Looking for a partner...\n\n/astop => cancel the search",
+	"anonymouschat/findingpartnercancelled": "Finding partner cancelled.",
+	"anonymouschat/notinanyroom": "You are not in an Anonymous Chat session.\n\n/asearch => find a new partner",
+	"anonymouschat/partnerfound": "Partner found!\n\n/anext => find a new partner\n/astop => stop",
+	"anonymouschat/partnerstoppeddialog": "Your partner has stopped the conversation.\n\n/asearch => find a new partner",
+	"anonymouschat/stoppingdialog": "You have stopped the conversation.\n\n/asearch => find a new partner",
 	"command/about": "Miki Bot is a multi-platform chatbot that runs concurrently on several different platforms.\n\nTELEGRAM t.me/mikixbot\nWHATSAPP wa.me/14013580123\n\nThis bot is still in development stage. Bots are subject to change at any time without notice.\n\n© RiozeC (2021)",
 	"command/eval/noargs": "/eval [javascript_code]\n\nEnter text to [javascript_code]",
 	"command/kbbi/$words": "Antonyms | Combinations | Descendants | Meaning | Proverbs | Related | See also | Synonyms | Translations",
@@ -8,6 +14,7 @@
 	"command/menu": "All Miki Bot commands documentation: https://riozec.github.io/mikibot\n\n%",
 	"command/reversetext/noargs": "/reversetext [text]\n\nEnter text to [text]",
 	"command/uppercase/noargs": "/uppercase [text]\n\nEnter text to [text]",
-	"permission/onlydev": "This command can only be executed by the developer.",
+	"permission/devonly": "This command can only be executed by the developer.",
+	"permission/privateonly": "This feature can only be used in private chat.",
 	"system/error": "An error was occured."
 }
