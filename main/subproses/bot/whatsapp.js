@@ -1,11 +1,21 @@
 const utils = require('../../utils');
 const IPC = new utils.IPC('WA', process);
 const fetch = require('node-fetch');
-const fs = require('fs/promises');
+const fsp = require('fs/promises');
+const fs = require('fs');
 
 const argv = JSON.parse(process.argv[2]);
 
-const cache = [];
+// "fix" this.isZero error
+require('long').prototype.toString = () => '';
+
+const cache = {
+    msg: [],
+};
+
+if (!fs.existsSync('./data/wa-tmpdb.json')) fs.writeFileSync('./data/wa-tmpdb.json', '{}');
+cache.anch = JSON.parse(fs.readFileSync('./data/wa-tmpdb.json'));
+setInterval(() => fs.writeFileSync('./data/wa-tmpdb.json', JSON.stringify(cache.anch)), 60000);
 
 log(0);
 const {
@@ -159,6 +169,7 @@ function mulai() {
                     for (const tipe in isi.contextInfo.quotedMessage) {
                         const _isi = isi.contextInfo.quotedMessage[tipe];
                         $pesan.q = muatPesan(tipe, _isi);
+                        $pesan.q.mid = isi.contextInfo.stanzaId;
 
                         break;
                     }
@@ -168,11 +179,11 @@ function mulai() {
             }
 
             log(2, $pesan);
-            cache.push(pesan);
+            cache.msg.push(pesan);
             setTimeout(
                 (id) => {
-                    cache.splice(
-                        cache.findIndex((_pesan) => _pesan.key.id === id),
+                    cache.msg.splice(
+                        cache.msg.findIndex((_pesan) => _pesan.key.id === id),
                         1
                     );
                 },
@@ -212,7 +223,14 @@ async function kirimPesan(pesan) {
     const $ = pesan._;
     const penerima = ID($.penerima);
     let opsi = {};
-    if ($.hasOwnProperty('re')) opsi.quoted = cache.filter((_pesan) => _pesan.key.id == $.mid)[0];
+    if ($.hasOwnProperty('re')) {
+        if (typeof $.re === 'string' && $.anch) {
+            if (!cache.anch[$.anch.roomID]) cache.anch[$.anch.roomID] = {};
+            opsi.quoted = cache.anch[$.anch.roomID][$.re];
+        } else {
+            opsi.quoted = cache.msg.filter((_pesan) => _pesan.key.id == $.mid)[0];
+        }
+    }
     if ($.wa_disappearing_message) opsi.ephemeralExpiration = $.wa_disappearing_message;
 
     try {
@@ -300,9 +318,13 @@ async function kirimPesan(pesan) {
         else {
             msg.text = $.teks;
         }
-        await bot.sendMessage(penerima, msg, opsi);
+        const terkirim = await bot.sendMessage(penerima, msg, opsi);
+        if ($.anch) {
+            if (!cache.anch[$.anch.roomID]) cache.anch[$.anch.roomID] = {};
+            cache.anch[$.anch.roomID][terkirim.key.id] = terkirim;
+        }
         log(5);
-        return { s: true };
+        return { s: true, mid: terkirim.key.id };
     } catch (e) {
         log(6);
         console.error(e);
@@ -320,7 +342,7 @@ async function unduhMedia(media) {
         buffer = Buffer.concat([buffer, chunk]);
     }
     const keluaran = `./tmp/${Date.now()}#${Math.random().toString(36).slice(2)}.${ext}`;
-    await fs.writeFile(keluaran, buffer);
+    await fsp.writeFile(keluaran, buffer);
     return keluaran;
 }
 
@@ -337,8 +359,25 @@ process.on('message', (pesan) => {
         } else if (pesan._.hasOwnProperty('penerima')) {
             IPC.terimaSinyal(pesan, (pesan) => kirimPesan(pesan));
         }
+
+        //////////////////// ANONYMOUS CHAT CACHE PESAN
+        else if (pesan._.hasOwnProperty('anch')) {
+            if (pesan._.anch.hasOwnProperty('roomID')) {
+                const roomID = pesan._.anch.roomID,
+                    msgID = pesan._.anch.msgID;
+                if (!cache.anch) cache.anch = {};
+                const msg = cache.msg.filter((_pesan) => _pesan.key.id == msgID)[0];
+                if (!cache.anch[roomID]) cache.anch[roomID] = {};
+                cache.anch[roomID][msgID] = msg;
+            } else if (pesan._.anch.hasOwnProperty('delRoomID')) {
+                const roomID = pesan._.anch.roomID;
+                if (cache.anch) delete cache.anch[roomID];
+            }
+        }
     }
 });
+
+process.on('exit', () => fs.writeFileSync('./data/wa-tmpdb.json', JSON.stringify(cache.anch)));
 
 function IDChat(ID) {
     return 'WA#' + ID.replace('@g.us', '') + '#C';
@@ -386,7 +425,7 @@ async function cekKoneksiInternet() {
 }
 
 if (argv.watch) {
-    require('fs').watch(__filename, () => {
+    fs.watch(__filename, () => {
         log(10);
         process.exit();
     });

@@ -60,6 +60,15 @@ async function anch(pesan, data) {
         const partner = room[$.uid];
         if (!partner) continue;
 
+        if (!room.chat) room.chat = [];
+        if (pesan.d === 'WA') {
+            IPC.kirimSinyal('WA', {
+                anch: {
+                    roomID: roomID,
+                    msgID: $.mid,
+                },
+            });
+        }
         if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test($.teks)) {
             const cmd = $.teks.slice(1).toLowerCase();
             console.log(cmd);
@@ -70,6 +79,13 @@ async function anch(pesan, data) {
                 if (cache.data.anch.ready?.length) {
                     const partnerID = _.sample(cache.data.anch.ready);
                     _.pull(cache.data.anch.ready, partnerID);
+                    if (pesan.d === 'WA') {
+                        IPC.kirimSinyal('WA', {
+                            anch: {
+                                delRoomID: roomID,
+                            },
+                        });
+                    }
                     const newRoomID = Math.random().toString(36).slice(2);
                     cache.data.anch.room[newRoomID] = {
                         [$.uid]: partnerID,
@@ -87,20 +103,37 @@ async function anch(pesan, data) {
             } else if (cmd === 'astop') {
                 delete cache.data.anch.room[roomID];
                 _.pull(cache.data.anch.active, $.uid, partner);
+                if (pesan.d === 'WA') {
+                    IPC.kirimSinyal('WA', {
+                        anch: {
+                            delRoomID: roomID,
+                        },
+                    });
+                }
                 kirimPesan($.uid, { teks: TEKS[$.bahasa]['anonymouschat/stoppingdialog'] });
                 kirimPesan(partner, { teks: TEKS[$.bahasa]['anonymouschat/partnerstoppeddialog'] });
                 return;
             }
         }
 
-        const msg = {};
+        const msg = {
+            anch: {
+                roomID: roomID,
+            },
+            re: $.q ? room.chat.filter((v) => v.includes($.q.mid))[0]?.filter?.((v) => v !== $.q.mid)?.[0] : undefined,
+        };
 
         if ($.teks) {
             msg.teks = $.teks;
         }
 
-        kirimPesan(partner, msg);
+        const terkirim = await _kirimPesan(partner, msg);
 
+        if (Array.isArray(terkirim.mid)) {
+            terkirim.mid.forEach((mid) => room.chat.push([$.mid, mid]));
+        } else {
+            room.chat.push([$.mid, terkirim.mid]);
+        }
         break;
     }
 }
@@ -130,7 +163,7 @@ async function perintah(pesan, data) {
             };
             log(5, hasil);
             logPesan(pesan.d, hasil, true);
-            return IPC.kirimSinyal(pesan.d, hasil);
+            return kirimPesan($.pengirim, hasil);
         } catch (e) {
             log(6, $.teks);
             console.error(e);
@@ -139,7 +172,7 @@ async function perintah(pesan, data) {
                 teks: TEKS[$.bahasa]['system/error'],
             };
             logPesan(pesan.d, hasil, true);
-            return IPC.kirimSinyal(pesan.d, hasil);
+            return kirimPesan($.pengirim, hasil);
         }
     } else {
         log(4, $.perintah);
@@ -328,6 +361,13 @@ const Perintah = {
 
 function kirimPesan(penerima, pesan) {
     return IPC.kirimSinyal(penerima.split('#')[0], {
+        penerima: penerima,
+        ...pesan,
+    });
+}
+
+function _kirimPesan(penerima, pesan) {
+    return IPC.kirimKueri(penerima.split('#')[0], {
         penerima: penerima,
         ...pesan,
     });
