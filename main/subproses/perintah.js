@@ -34,15 +34,18 @@ async function proses(pesan) {
     log(1, pesan);
     logPesan(pesan.d, pesan._);
     const data = {
-        c: await DB.cari({ _id: pesan._.pengirim }),
-        u: pesan._.pengirim !== pesan._.uid ? DB.cari({ _id: pesan._.uid }) : null,
+        c: (await DB.cari({ _id: pesan._.pengirim })).hasil,
+        u: pesan._.pengirim !== pesan._.uid ? (await DB.cari({ _id: pesan._.uid })).hasil : null,
     };
 
     pesan._.bahasa = data.c?.lang || 'en';
 
+    ////////// ANONYMOUS CHAT
     if (!pesan._.pengirim.endsWith('#C') && cache.data.anch?.active?.includes?.(pesan._.uid)) {
         anch(pesan, data);
-    } else if (pesan._.teks) {
+    }
+    ////////// PERINTAH
+    else if (pesan._.teks) {
         if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test(pesan._.teks)) {
             perintah(pesan, data);
         } else {
@@ -231,6 +234,13 @@ async function anch(pesan, data) {
     }
 }
 
+//////////////////// VALIDASI GRUP
+async function validasiGrup(bahasa, data) {
+    if (!data.c) return { teks: TEKS[bahasa]['group/notregistered'] };
+    if (Date.now() > +data.c.expiration) return { teks: TEKS[bahasa]['group/expired'] };
+    else return false;
+}
+
 //////////////////// PERINTAH-PERINTAH
 
 async function perintah(pesan, data) {
@@ -239,11 +249,14 @@ async function perintah(pesan, data) {
 
     $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
     $.perintah = _perintah.slice(1).toLowerCase();
-    $.arg = $.argumen || $.q?.teks;
+    $.arg = $.argumen || $.q?.teks || '';
 
     log(2, $.teks);
+    if ($.perintah === 'getid') return kirimPesan($.pengirim, { teks: $.pengirim, re: true, mid: $.mid });
 
     if (Perintah.hasOwnProperty($.perintah)) {
+        let r;
+        if ((r = await validasiGrup($.bahasa, data))) return kirimPesan($.pengirim, r);
         const msg = {
             penerima: $.pengirim,
             mid: $.mid,
@@ -277,6 +290,16 @@ const Perintah = {
         return {
             teks: TEKS[$.bahasa]['command/about'],
         };
+    },
+    addgroupsubscription: async ($) => {
+        if (!cekDev($.uid)) return { teks: TEKS[$.bahasa]['permission/devonly'] };
+        const [id, durasi] = $.argumen.split(/\s+/);
+        if (!id) return { teks: TEKS[$.bahasa]['command/addgroupsubscription/noid'] };
+        if (isNaN(+durasi)) return { teks: TEKS[$.bahasa]['command/addgroupsubscription/invalidduration'] };
+        const cdata = (await DB.cari({ _id: id })).hasil;
+        if (cdata) await DB.perbarui({ _id: id }, { $set: { expiration: Date.now() + +durasi } });
+        else await DB.buat({ _id: id, join: Date.now(), expiration: Date.now() + +durasi });
+        return { teks: TEKS[$.bahasa]['command/addgroupsubscription/done'].replace('%id', id).replace('%date', new Date(Date.now() + +durasi)) };
     },
     anext: ($) => {
         return { teks: TEKS[$.bahasa]['anonymouschat/notinanyroom'] };
