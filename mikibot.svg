@@ -1,1 +1,33 @@
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 460 100" xml:space="preserve"><path d="M0 0L0 100L25 100L25 0L0 0M75 0L75 100L100 100L100 0L75 0M110 0L110 100L135 100L135 0L110 0M145 0L145 100L170 100L170 0L145 0M205 0L205 100L230 100L230 0L205 0M240 0L240 100L265 100L265 0L240 0M400 0L400 100L425 100L425 0L400 0" fill="#eccc29" opacity="75%" /><path d="M12.5 0L50.5 100L87.5 0L12.5 0M145 50.5L195 12.5L195 87.5L145 50.5M365 25L460 25L412.5 0L365 25" fill="#40c81e" opacity="75%" /><circle cx="265" cy="25" r="25" fill="#3c9bdd" opacity="75%" /><circle cx="265" cy="75" r="25" fill="#3c9bdd" opacity="75%" /><circle cx="340" cy="50" r="50" fill="#3c9bdd" opacity="75%" /></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="600" viewBox="0 0 2000 600">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #eccc29;
+      }
+
+      .cls-2 {
+        fill: #40c81e;
+        fill-rule: evenodd;
+      }
+
+      .cls-3 {
+        fill: #3c9bdd;
+      }
+    </style>
+  </defs>
+  <rect id="Rectangle_1_copy" data-name="Rectangle 1 copy" class="cls-1" x="650" y="100" width="100" height="400"/>
+  <rect id="Rectangle_1_copy_3" data-name="Rectangle 1 copy 3" class="cls-1" x="350" y="100" width="100" height="400"/>
+  <rect id="Rectangle_1_copy_4" data-name="Rectangle 1 copy 4" class="cls-1" x="500" y="250" width="100" height="250"/>
+  <rect id="Rectangle_1_copy_2" data-name="Rectangle 1 copy 2" class="cls-1" x="150" y="100" width="100" height="400"/>
+  <path id="Polygon_1" data-name="Polygon 1" class="cls-2" d="M300,499.993L150,100.007H450Z"/>
+  <circle id="Ellipse_1_copy_3" data-name="Ellipse 1 copy 3" class="cls-3" cx="550" cy="150" r="50"/>
+  <rect id="Rectangle_1_copy_6" data-name="Rectangle 1 copy 6" class="cls-1" x="850" y="100" width="100" height="250"/>
+  <circle id="Ellipse_1_copy_4" data-name="Ellipse 1 copy 4" class="cls-3" cx="900" cy="450" r="50"/>
+  <path id="Polygon_1_copy" data-name="Polygon 1 copy" class="cls-2" d="M650,300L800,100V500Z"/>
+  <rect id="Rectangle_1_copy_5" data-name="Rectangle 1 copy 5" class="cls-1" x="1550" y="100" width="300" height="100"/>
+  <circle id="Ellipse_1_copy_2" data-name="Ellipse 1 copy 2" class="cls-3" cx="1375" cy="300" r="200"/>
+  <rect id="Rectangle_1_copy_8" data-name="Rectangle 1 copy 8" class="cls-1" x="1000" y="100" width="100" height="400"/>
+  <path id="Polygon_1_copy_4" data-name="Polygon 1 copy 4" class="cls-2" d="M1200,400L1000,500V300Z"/>
+  <path id="Polygon_1_copy_3" data-name="Polygon 1 copy 3" class="cls-2" d="M1200,200L1000,300V100Z"/>
+  <rect id="Rectangle_1_copy_7" data-name="Rectangle 1 copy 7" class="cls-1" x="1650" y="200" width="100" height="300"/>
+</svg>
