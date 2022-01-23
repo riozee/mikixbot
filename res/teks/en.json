@@ -14,6 +14,7 @@
 	"command/kbbi/noargs": "/kbbi [word]\n\nEnter the searched word to [word]",
 	"command/lowercase/noargs": "/lowercase [text]\n\nEnter text to [text]",
 	"command/menu": "All Miki Bot commands documentation: https://riozec.github.io/mikibot\n\n%",
+	"command/pricing": "Miki Bot pricelist\n\nRent the bot or add the bot to a group:\n- IDR 2k (1 day)\n- IDR 9k (3 days)\n- IDR 19k (7 days)\n- IDR 74k (1 month)\n- IDR 289k (4 months)\n\nPremium user:\n- \"Free user\"\nCooldown command every 5 seconds.\nIDR 0k/day\n- \"Premium Lite\"\nCooldown command every 1.5 seconds.\nIDR 0.4k/day\n- \"Premium Xtreme\"\nNo cooldown.\nIDR 1.4k/day\n\nIf interested, contact wa.me/6283120034889.",
 	"command/reversetext/noargs": "/reversetext [text]\n\nEnter text to [text]",
 	"command/setgroupsubscription/done": "Successfully registered group id: %id\n\nThe subscription period will end on %date",
 	"command/setgroupsubscription/invalidduration": "/setgroupsubscription [id] [duration]\n\n[duration] is not a number.",
@@ -25,11 +26,11 @@
 	"command/setpremiumuser/noid": "/setpremiumuser [id] [level] [duration]\n\nThere's no [id].",
 	"command/uppercase/noargs": "/uppercase [text]\n\nEnter text to [text]",
 	"group/expired": "Your group subscription has expired.\nPlease chat wa.me/6283120034889 for re-registration.",
-	"group/notregistered": "Your group is not registered in the bot system.\nPlease chat wa.me/6283120034889 to order.",
+	"group/notregistered": "Your group is not registered in the bot system.\nSee /pricing to order.",
 	"permission/devonly": "This command can only be executed by the developer.",
 	"permission/privateonly": "This feature can only be used in private chat.",
 	"system/databaseerror": "An error occurred while writing data to the database.\n\n%e",
 	"system/error": "An error was occured.\n\n%e",
 	"user/cdcommandreached": "Hi, %lvl!\nPlease delay for %dur second(s) before starting a new command.",
-	"user/freeusercdcommandreached": "Hi, %lvl!\nPlease delay for %dur second(s) before starting a new command.\n\nTo reduce the delay time and enjoy other premium features, chat wa.me/6283120034889."
+	"user/freeusercdcommandreached": "Hi, %lvl!\nPlease delay for %dur second(s) before starting a new command.\n\nTo remove the delay time and enjoy other premium features, see /pricing."
 }

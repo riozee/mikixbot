@@ -250,16 +250,13 @@ async function validasiUser(bahasa, uid, data) {
     console.log(cdcmd, data.u);
     if (!data.u || data.u.premlvl === 0 || Date.now() > +data.u.expiration) {
         // FREE USER
-        if (Date.now() - cdcmd[uid] < 10000) r = { teks: TEKS[bahasa]['user/freeusercdcommandreached'].replace('%lvl', 'Free User').replace('%dur', '10') };
+        if (Date.now() - cdcmd[uid] < 5000) r = { teks: TEKS[bahasa]['user/freeusercdcommandreached'].replace('%lvl', 'Free User').replace('%dur', '5') };
     } else {
         if (data.u.premlvl === 1) {
-            // PREMIUM COPPER
-            if (Date.now() - cdcmd[uid] < 3000) r = { teks: TEKS[bahasa]['user/cdcommandreached'].replace('%lvl', 'Premium Copper').replace('%dur', '5') };
+            // PREMIUM LITE
+            if (Date.now() - cdcmd[uid] < 1500) r = { teks: TEKS[bahasa]['user/cdcommandreached'].replace('%lvl', 'Premium Lite').replace('%dur', '1.5') };
         } else if (data.u.premlvl === 2) {
-            // PREMIUM DIAMOND
-            if (Date.now() - cdcmd[uid] < 1000) r = { teks: TEKS[bahasa]['user/cdcommandreached'].replace('%lvl', 'Premium Diamond').replace('%dur', '1') };
-        } else if (data.u.premlvl === 3) {
-            // PREMIUM NETHERITE
+            // PREMIUM XTREME
         }
     }
     cdcmd[uid] = Date.now();
@@ -279,11 +276,12 @@ async function perintah(pesan, data) {
     log(2, $.teks);
     if ($.perintah === 'getid') return kirimPesan($.pengirim, { teks: $.pengirim, re: true, mid: $.mid });
     if ($.perintah === 'getuid') return kirimPesan($.pengirim, { teks: $.uid, re: true, mid: $.mid });
+    if ($.perintah === 'pricing') return kirimPesan($.pengirim, { teks: TEKS[$.bahasa]['command/pricing'], re: true, mid: $.mid });
 
     if (Perintah.hasOwnProperty($.perintah)) {
         let r;
         if ($.pengirim.endsWith('#C') && (r = await validasiGrup($.bahasa, data))) return kirimPesan($.pengirim, r);
-        if ((r = await validasiUser($.bahasa, $.uid, data))) return kirimPesan($.pengirim, r);
+        if ((r = await validasiUser($.bahasa, $.uid, data))) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
 
         const msg = {
             penerima: $.pengirim,
@@ -485,6 +483,7 @@ const Perintah = {
                 .join('\n')
         ),
     }),
+    pricing: () => {},
     reversetext: ($) => {
         if ($.arg) {
             return {
@@ -506,8 +505,8 @@ const Perintah = {
         let [id, level, durasi] = $.argumen.split(/\s+/),
             perpanjang = false;
         if (!id) return { teks: TEKS[$.bahasa]['command/setpremiumuser/noid'] };
-        if (isNaN(+level) || +level < 0 || +level > 3) return { teks: TEKS[$.bahasa]['command/setpremiumuser/invalidlevel'] };
-        if (durasi.startsWith('+')) {
+        if (isNaN(+level) || +level < 0 || +level > 2) return { teks: TEKS[$.bahasa]['command/setpremiumuser/invalidlevel'] };
+        if (durasi?.startsWith?.('+')) {
             perpanjang = true;
             durasi = durasi.slice(1);
         }
@@ -517,7 +516,7 @@ const Perintah = {
         if (udata) e = await DB.perbarui({ _id: id }, { $set: { premlvl: +level, expiration: perpanjang ? udata.expiration + +durasi : Date.now() + +durasi } });
         else if (+level) e = await DB.buat({ _id: id, premlvl: +level, expiration: Date.now() + +durasi });
         if (e._e) throw e._e;
-        const namaLvl = ['Free User', 'Premium Copper', 'Premium Diamond', 'Premium Netherite'][+level];
+        const namaLvl = ['Free User', 'Premium Lite', 'Premium Xtreme'][+level];
         if (+level)
             return {
                 teks: TEKS[$.bahasa]['command/setpremiumuser/done']

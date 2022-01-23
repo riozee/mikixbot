@@ -14,6 +14,7 @@
 	"command/kbbi/noargs": "/kbbi [kata]\n\nMasukkan kata yang dicari ke [kata]",
 	"command/lowercase/noargs": "/lowercase [teks]\n\nMasukkan teks ke dalam [teks]",
 	"command/menu": "Dokumentasi lengkap semua perintah Miki Bot: https://riozec.github.io/mikibot\n\n%",
+	"command/pricing": "Miki Bot pricelist\n\nSewa bot atau masukkan bot ke grup:\n- Rp.2k (1 hari)\n- Rp.9k (3 hari)\n- Rp.19k (7 hari)\n- Rp.74k (1 bulan)\n- Rp.289k (4 bulan)\n\nPengguna/user premium:\n- \"Free user\"\nJeda command 5 detik.\nRp.0k/hari\n- \"Premium Lite\"\nJeda command 1,5 detik.\nRp.0,4k/hari\n- \"Premium Xtreme\"\nTanpa jeda command\nRp.1,4k/hari\n\nJika tertarik, hubungi wa.me/6283120034889.",
 	"command/reversetext/noargs": "/reversetext [teks]\n\nMasukkan teks ke [teks]",
 	"command/setgroupsubscription/done": "Berhasil meregistrasi grup id: %id\n\nMasa langganan akan berakhir pada %date",
 	"command/setgroupsubscription/invalidduration": "/setgroupsubscription [id] [durasi]\n\n[durasi] bukan angka.",
@@ -25,11 +26,11 @@
 	"command/setpremiumuser/noid": "/setpremiumuser [id] [level] [durasi]\n\nTidak ada [id].",
 	"command/uppercase/noargs": "/uppercase [teks]\n\nMasukkan teks ke dalam [teks]",
 	"group/expired": "Masa langganan grup Anda telah berakhir.\nSilakan hubungi wa.me/6283120034889 untuk registrasi ulang.",
-	"group/notregistered": "Grup Anda belum teregristrasi di sistem bot.\nSilakan hubungi wa.me/6283120034889 untuk memesan.",
+	"group/notregistered": "Grup Anda belum teregristrasi di sistem bot.\nLihat /pricing untuk memesan.",
 	"permission/devonly": "Perintah ini hanya dapat dijalankan oleh developer.",
 	"permission/privateonly": "Fitur ini hanya dapat digunakan di chat pribadi.",
 	"system/databaseerror": "Terjadi kesalahan saat menulis data ke database.\n\n%e",
 	"system/error": "Terjadi kesalahan.\n\n%e",
 	"user/cdcommandreached": "Hai, %lvl!\nHarap beri jeda selama %dur detik sebelum memulai command baru.",
-	"user/freeusercdcommandreached": "Hai, %lvl!\nHarap beri jeda selama %dur detik sebelum memulai command baru.\n\nUntuk mengurangi waktu jeda dan menikmati fitur premium lainnya, hubungi wa.me/6283120034889."
+	"user/freeusercdcommandreached": "Hai, %lvl!\nHarap beri jeda selama %dur detik sebelum memulai command baru.\n\nUntuk menghilangkan waktu jeda dan menikmati fitur premium lainnya, lihat /pricing."
 }
