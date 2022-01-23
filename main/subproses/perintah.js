@@ -321,15 +321,24 @@ const Perintah = {
     },
     setgroupsubscription: async ($) => {
         if (!cekDev($.uid)) return { teks: TEKS[$.bahasa]['permission/devonly'] };
-        const [id, durasi] = $.argumen.split(/\s+/);
+        let [id, durasi] = $.argumen.split(/\s+/),
+            perpanjang = false;
         if (!id) return { teks: TEKS[$.bahasa]['command/setgroupsubscription/noid'] };
+        if (durasi.startsWith('+')) {
+            perpanjang = true;
+            durasi = durasi.slice(1);
+        }
         if (isNaN(+durasi)) return { teks: TEKS[$.bahasa]['command/setgroupsubscription/invalidduration'] };
         let e;
         const cdata = (await DB.cari({ _id: id })).hasil;
-        if (cdata) e = await DB.perbarui({ _id: id }, { $set: { expiration: Date.now() + +durasi } });
+        if (cdata) e = await DB.perbarui({ _id: id }, { $set: { expiration: perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi } });
         else e = await DB.buat({ _id: id, join: Date.now(), expiration: Date.now() + +durasi });
         if (e._e) throw e._e;
-        return { teks: TEKS[$.bahasa]['command/setgroupsubscription/done'].replace('%id', id).replace('%date', new Date(Date.now() + +durasi)) };
+        return {
+            teks: TEKS[$.bahasa]['command/setgroupsubscription/done']
+                .replace('%id', id)
+                .replace('%date', new Date(perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi)),
+        };
     },
     anext: ($) => {
         return { teks: TEKS[$.bahasa]['anonymouschat/notinanyroom'] };
@@ -494,13 +503,18 @@ const Perintah = {
     },
     setpremiumuser: async ($) => {
         if (!cekDev($.uid)) return { teks: TEKS[$.bahasa]['permission/devonly'] };
-        const [id, level, durasi] = $.argumen.split(/\s+/);
+        let [id, level, durasi] = $.argumen.split(/\s+/),
+            perpanjang = false;
         if (!id) return { teks: TEKS[$.bahasa]['command/setpremiumuser/noid'] };
         if (isNaN(+level) || +level < 0 || +level > 3) return { teks: TEKS[$.bahasa]['command/setpremiumuser/invalidlevel'] };
-        if (isNaN(+durasi)) return { teks: TEKS[$.bahasa]['command/setpremiumuser/invalidduration'] };
+        if (durasi.startsWith('+')) {
+            perpanjang = true;
+            durasi = durasi.slice(1);
+        }
+        if (+level !== 0 && isNaN(+durasi)) return { teks: TEKS[$.bahasa]['command/setpremiumuser/invalidduration'] };
         const udata = (await DB.cari({ _id: id })).hasil;
         let e;
-        if (udata) e = await DB.perbarui({ _id: id }, { $set: { premlvl: +level, expiration: Date.now() + +durasi } });
+        if (udata) e = await DB.perbarui({ _id: id }, { $set: { premlvl: +level, expiration: perpanjang ? udata.expiration + +durasi : Date.now() + +durasi } });
         else if (+level) e = await DB.buat({ _id: id, premlvl: +level, expiration: Date.now() + +durasi });
         if (e._e) throw e._e;
         const namaLvl = ['Free User', 'Premium Copper', 'Premium Diamond', 'Premium Netherite'][+level];
@@ -509,13 +523,13 @@ const Perintah = {
                 teks: TEKS[$.bahasa]['command/setpremiumuser/done']
                     .replace('%id', id)
                     .replace('%lvl', namaLvl)
-                    .replace('%date', new Date(Date.now() + +durasi)),
+                    .replace('%date', new Date(perpanjang ? udata.expiration + +durasi : Date.now() + +durasi)),
             };
         return {
             teks: TEKS[$.bahasa]['command/setpremiumuser/doneremove']
                 .replace('%id', id)
                 .replace('%lvl', namaLvl)
-                .replace('%date', new Date(Date.now() + +durasi)),
+                .replace('%date', new Date(perpanjang ? udata.expiration + +durasi : Date.now() + +durasi)),
         };
     },
     uppercase: ($) => {
