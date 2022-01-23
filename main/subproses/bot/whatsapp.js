@@ -129,6 +129,23 @@ function mulai() {
                             nomor: kontak.vcard.match(/TEL.*:([\+\(\)\-\. \d]+)/)?.[1],
                         });
                     });
+                } else if (tipe === 'productMessage') {
+                    if (isi.product?.productImage) {
+                        _.gambar = {
+                            id: `${isi.product.productImage.mediaKey.toString()}|${isi.product.productImage.directPath}|${isi.product.productImage.url}|image`,
+                            ukuran: Number(isi.product.productImage.fileLength),
+                            eks: 'jpg',
+                        };
+                        _.teks = `${isi.product.title || ''}\n${isi.product.description || ''}\nhttps://wa.me/p/${isi.product.productId || ''}/${
+                            isi.businessOwnerJid?.replace?.('@s.whatsapp.net', '') || ''
+                        }`;
+                        _.wa_product_message = true;
+                    } else {
+                        _.teks = `${isi.product?.title || ''}\n${isi.product?.description || ''}\nhttps://wa.me/p/${isi.product?.productId || ''}/${
+                            isi.businessOwnerJid?.replace?.('@s.whatsapp.net', '') || ''
+                        }`;
+                        _.wa_product_message = true;
+                    }
                 } else if (tipe === 'viewOnceMessage') {
                     tipe = Object.keys(isi.message)[0];
                     isi = isi.message[tipe];
