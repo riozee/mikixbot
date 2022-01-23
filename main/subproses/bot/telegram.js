@@ -312,10 +312,12 @@ function ID(_ID) {
 
 async function kirimPesanTeks(penerima, teks, opsi) {
     const ids = [];
-    for (const _teks of bagiString(teks, 4096)) {
-        const terkirim = await bot.telegram.sendMessage(penerima, _teks, opsi);
-        ids.push(terkirim.message_id);
-    }
+    if (teks.length === 0) ids.push((await bot.telegram.sendMessage(penerima, '-', opsi)).message_id);
+    else
+        for (const _teks of bagiString(teks, 4096)) {
+            const terkirim = await bot.telegram.sendMessage(penerima, _teks, opsi);
+            ids.push(terkirim.message_id);
+        }
     return ids;
 }
 

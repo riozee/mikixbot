@@ -33,9 +33,10 @@ setInterval(() => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.dat
 async function proses(pesan) {
     log(1, pesan);
     logPesan(pesan.d, pesan._);
+    const c = (await DB.cari({ _id: pesan._.pengirim })).hasil;
     const data = {
-        c: (await DB.cari({ _id: pesan._.pengirim })).hasil,
-        u: pesan._.pengirim !== pesan._.uid ? (await DB.cari({ _id: pesan._.uid })).hasil : null,
+        c: c,
+        u: pesan._.pengirim !== pesan._.uid ? (await DB.cari({ _id: pesan._.uid })).hasil : c,
     };
 
     pesan._.bahasa = data.c?.lang || 'en';
@@ -234,11 +235,35 @@ async function anch(pesan, data) {
     }
 }
 
-//////////////////// VALIDASI GRUP
+//////////////////// VALIDASI
 async function validasiGrup(bahasa, data) {
     if (!data.c) return { teks: TEKS[bahasa]['group/notregistered'] };
     if (Date.now() > +data.c.expiration) return { teks: TEKS[bahasa]['group/expired'] };
     else return false;
+}
+
+async function validasiUser(bahasa, uid, data) {
+    let r = false;
+    if (!cache.data.cdcmd) cache.data.cdcmd = {};
+    const cdcmd = cache.data.cdcmd;
+    if (!cdcmd[uid]) cdcmd[uid] = 0;
+    console.log(cdcmd, data.u);
+    if (!data.u || data.u.premlvl === 0 || Date.now() > +data.u.expiration) {
+        // FREE USER
+        if (Date.now() - cdcmd[uid] < 10000) r = { teks: TEKS[bahasa]['user/freeusercdcommandreached'].replace('%lvl', 'Free User').replace('%dur', '10') };
+    } else {
+        if (data.u.premlvl === 1) {
+            // PREMIUM COPPER
+            if (Date.now() - cdcmd[uid] < 3000) r = { teks: TEKS[bahasa]['user/cdcommandreached'].replace('%lvl', 'Premium Copper').replace('%dur', '5') };
+        } else if (data.u.premlvl === 2) {
+            // PREMIUM DIAMOND
+            if (Date.now() - cdcmd[uid] < 1000) r = { teks: TEKS[bahasa]['user/cdcommandreached'].replace('%lvl', 'Premium Diamond').replace('%dur', '1') };
+        } else if (data.u.premlvl === 3) {
+            // PREMIUM NETHERITE
+        }
+    }
+    cdcmd[uid] = Date.now();
+    return r;
 }
 
 //////////////////// PERINTAH-PERINTAH
@@ -253,10 +278,13 @@ async function perintah(pesan, data) {
 
     log(2, $.teks);
     if ($.perintah === 'getid') return kirimPesan($.pengirim, { teks: $.pengirim, re: true, mid: $.mid });
+    if ($.perintah === 'getuid') return kirimPesan($.pengirim, { teks: $.uid, re: true, mid: $.mid });
 
     if (Perintah.hasOwnProperty($.perintah)) {
         let r;
-        if ((r = await validasiGrup($.bahasa, data))) return kirimPesan($.pengirim, r);
+        if ($.pengirim.endsWith('#C') && (r = await validasiGrup($.bahasa, data))) return kirimPesan($.pengirim, r);
+        if ((r = await validasiUser($.bahasa, $.uid, data))) return kirimPesan($.pengirim, r);
+
         const msg = {
             penerima: $.pengirim,
             mid: $.mid,
@@ -275,7 +303,7 @@ async function perintah(pesan, data) {
             console.error(e);
             const hasil = {
                 ...msg,
-                teks: TEKS[$.bahasa]['system/error'],
+                teks: TEKS[$.bahasa]['system/error'].replace('%e', e),
             };
             logPesan(pesan.d, hasil, true);
             return kirimPesan($.pengirim, hasil);
@@ -291,15 +319,17 @@ const Perintah = {
             teks: TEKS[$.bahasa]['command/about'],
         };
     },
-    addgroupsubscription: async ($) => {
+    setgroupsubscription: async ($) => {
         if (!cekDev($.uid)) return { teks: TEKS[$.bahasa]['permission/devonly'] };
         const [id, durasi] = $.argumen.split(/\s+/);
-        if (!id) return { teks: TEKS[$.bahasa]['command/addgroupsubscription/noid'] };
-        if (isNaN(+durasi)) return { teks: TEKS[$.bahasa]['command/addgroupsubscription/invalidduration'] };
+        if (!id) return { teks: TEKS[$.bahasa]['command/setgroupsubscription/noid'] };
+        if (isNaN(+durasi)) return { teks: TEKS[$.bahasa]['command/setgroupsubscription/invalidduration'] };
+        let e;
         const cdata = (await DB.cari({ _id: id })).hasil;
-        if (cdata) await DB.perbarui({ _id: id }, { $set: { expiration: Date.now() + +durasi } });
-        else await DB.buat({ _id: id, join: Date.now(), expiration: Date.now() + +durasi });
-        return { teks: TEKS[$.bahasa]['command/addgroupsubscription/done'].replace('%id', id).replace('%date', new Date(Date.now() + +durasi)) };
+        if (cdata) e = await DB.perbarui({ _id: id }, { $set: { expiration: Date.now() + +durasi } });
+        else e = await DB.buat({ _id: id, join: Date.now(), expiration: Date.now() + +durasi });
+        if (e._e) throw e._e;
+        return { teks: TEKS[$.bahasa]['command/setgroupsubscription/done'].replace('%id', id).replace('%date', new Date(Date.now() + +durasi)) };
     },
     anext: ($) => {
         return { teks: TEKS[$.bahasa]['anonymouschat/notinanyroom'] };
@@ -355,6 +385,8 @@ const Perintah = {
             };
         }
     },
+    getid: () => {},
+    getuid: () => {},
     help: ($) => Perintah.menu($),
     kbbi: async ($) => {
         if ($.arg) {
@@ -458,6 +490,32 @@ const Perintah = {
     say: ($) => {
         return {
             teks: $.arg,
+        };
+    },
+    setpremiumuser: async ($) => {
+        if (!cekDev($.uid)) return { teks: TEKS[$.bahasa]['permission/devonly'] };
+        const [id, level, durasi] = $.argumen.split(/\s+/);
+        if (!id) return { teks: TEKS[$.bahasa]['command/setpremiumuser/noid'] };
+        if (isNaN(+level) || +level < 0 || +level > 3) return { teks: TEKS[$.bahasa]['command/setpremiumuser/invalidlevel'] };
+        if (isNaN(+durasi)) return { teks: TEKS[$.bahasa]['command/setpremiumuser/invalidduration'] };
+        const udata = (await DB.cari({ _id: id })).hasil;
+        let e;
+        if (udata) e = await DB.perbarui({ _id: id }, { $set: { premlvl: +level, expiration: Date.now() + +durasi } });
+        else if (+level) e = await DB.buat({ _id: id, premlvl: +level, expiration: Date.now() + +durasi });
+        if (e._e) throw e._e;
+        const namaLvl = ['Free User', 'Premium Copper', 'Premium Diamond', 'Premium Netherite'][+level];
+        if (+level)
+            return {
+                teks: TEKS[$.bahasa]['command/setpremiumuser/done']
+                    .replace('%id', id)
+                    .replace('%lvl', namaLvl)
+                    .replace('%date', new Date(Date.now() + +durasi)),
+            };
+        return {
+            teks: TEKS[$.bahasa]['command/setpremiumuser/doneremove']
+                .replace('%id', id)
+                .replace('%lvl', namaLvl)
+                .replace('%date', new Date(Date.now() + +durasi)),
         };
     },
     uppercase: ($) => {
