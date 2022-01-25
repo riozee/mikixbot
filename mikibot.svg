@@ -1,1 +1,77 @@
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 460 100" xml:space="preserve"><path d="M0 0L0 100L25 100L25 0L0 0M75 0L75 100L100 100L100 0L75 0M110 0L110 100L135 100L135 0L110 0M145 0L145 100L170 100L170 0L145 0M205 0L205 100L230 100L230 0L205 0M240 0L240 100L265 100L265 0L240 0M400 0L400 100L425 100L425 0L400 0" fill="#eccc29" opacity="75%" /><path d="M12.5 0L50.5 100L87.5 0L12.5 0M145 50.5L195 12.5L195 87.5L145 50.5M365 25L460 25L412.5 0L365 25" fill="#40c81e" opacity="75%" /><circle cx="265" cy="25" r="25" fill="#3c9bdd" opacity="75%" /><circle cx="265" cy="75" r="25" fill="#3c9bdd" opacity="75%" /><circle cx="340" cy="50" r="50" fill="#3c9bdd" opacity="75%" /></svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <metadata><?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.6-c145 79.163499, 2018/08/13-16:40:22        ">
+   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+      <rdf:Description rdf:about=""
+            xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+         <xmp:CreatorTool>Adobe Photoshop CC 2019 (Windows)</xmp:CreatorTool>
+      </rdf:Description>
+   </rdf:RDF>
+</x:xmpmeta>
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                           
+<?xpacket end="w"?></metadata>
+<defs>
+    <style>
+      .cls-1 {
+        filter: url(#filter);
+      }
+
+      .cls-2 {
+        fill: #eccc29;
+      }
+
+      .cls-3 {
+        fill: #40c81e;
+        fill-rule: evenodd;
+      }
+
+      .cls-4 {
+        fill: #3c9bdd;
+      }
+    </style>
+    <filter id="filter" filterUnits="userSpaceOnUse">
+      <feOffset result="offset" dx="10.607" dy="10.607" in="SourceAlpha"/>
+      <feGaussianBlur result="blur"/>
+      <feFlood result="flood"/>
+      <feComposite result="composite" operator="in" in2="blur"/>
+      <feBlend result="blend" in="SourceGraphic"/>
+      <feGaussianBlur result="blur-2" stdDeviation="4.472" in="SourceAlpha"/>
+      <feFlood result="flood-2" flood-opacity="0.54"/>
+      <feComposite result="composite-2" operator="out" in2="blur-2"/>
+      <feOffset result="offset-2"/>
+      <feComposite result="composite-3" operator="in" in2="SourceAlpha"/>
+      <feBlend result="blend-2" mode="multiply" in2="blend"/>
+    </filter>
+  </defs>
+  <g class="cls-1">
+    <rect id="Rectangle_1_copy" data-name="Rectangle 1 copy" class="cls-2" x="600" y="300" width="100" height="400"/>
+    <rect id="Rectangle_1_copy_3" data-name="Rectangle 1 copy 3" class="cls-2" x="300" y="300" width="100" height="400"/>
+    <rect id="Rectangle_1_copy_4" data-name="Rectangle 1 copy 4" class="cls-2" x="450" y="450" width="100" height="250"/>
+    <rect id="Rectangle_1_copy_2" data-name="Rectangle 1 copy 2" class="cls-2" x="100" y="300" width="100" height="400"/>
+    <path id="Polygon_1" data-name="Polygon 1" class="cls-3" d="M250,699.993L100,300.007H400Z"/>
+    <circle id="Ellipse_1_copy_3" data-name="Ellipse 1 copy 3" class="cls-4" cx="500" cy="350" r="50"/>
+    <rect id="Rectangle_1_copy_6" data-name="Rectangle 1 copy 6" class="cls-2" x="800" y="300" width="100" height="250"/>
+    <circle id="Ellipse_1_copy_4" data-name="Ellipse 1 copy 4" class="cls-4" cx="850" cy="650" r="50"/>
+    <path id="Polygon_1_copy" data-name="Polygon 1 copy" class="cls-3" d="M600,500L750,300V700Z"/>
+  </g>
+</svg>
