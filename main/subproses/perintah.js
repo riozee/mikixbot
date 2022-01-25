@@ -268,6 +268,7 @@ async function validasiUser(bahasa, uid, data) {
 async function perintah(pesan, data) {
     const $ = pesan._;
     const _perintah = $.teks.split(/\s+/)[0];
+    $.platform = pesan.d;
 
     $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
     $.perintah = _perintah.slice(1).toLowerCase();
@@ -484,6 +485,17 @@ const Perintah = {
         ),
     }),
     pricing: () => {},
+    register: async ($, data) => {
+        if (data.u) return { teks: TEKS[$.bahasa]['command/register/alreadyregistered'] };
+        if (!$.argumen) return { teks: TEKS[$.bahasa]['command/register/noargs'] };
+        const { _e } = await DB.buat({
+            _id: $.uid,
+            join: Date.now(),
+            name: $.argumen,
+        });
+        if (_e) throw _e;
+        return { teks: TEKS[$.bahasa]['command/register/done'].replace('%name', $.argumen).replace('%id', $.uid).replace('%date', new Date().toString()) };
+    },
     reversetext: ($) => {
         if ($.arg) {
             return {
@@ -499,6 +511,48 @@ const Perintah = {
         return {
             teks: $.arg,
         };
+    },
+    set: async ($, data) => {
+        if (!data.u) return { teks: TEKS[$.bahasa]['permission/registeredonly'] };
+        const Settings = {
+            lang: async () => {
+                if ($.pengirim.endsWith('#C')) {
+                    if (!(await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin) return { teks: TEKS[$.bahasa]['permission/adminonly'] };
+                }
+                const langs = Object.keys(TEKS);
+                if (!args[1]) return { teks: TEKS[$.bahasa]['command/set/lang/noargs'].replace('%langs', langs.join(', ')) };
+                args[1] = args[1].toLowerCase();
+                if (!langs.includes(args[1]))
+                    return { teks: TEKS[$.bahasa]['command/set/lang/unknownlanguage'].replace('%langs', langs.join(', ')).replace('%lang', args[1]) };
+                const { _e } = await DB.perbarui({ _id: $.pengirim.endsWith('#C') ? $.pengirim : $.uid }, { $set: { lang: args[1] } });
+                if (_e) throw _e;
+                return { teks: TEKS[args[1]]['command/set/lang/done'].replace('%lang', args[1]) };
+            },
+        };
+
+        const args = $.argumen.split(/\s+/);
+        if (!args[0])
+            return {
+                teks: TEKS[$.bahasa]['command/set/noargs'].replace(
+                    '%list',
+                    Object.keys(Settings)
+                        .map((v) => '/set ' + v)
+                        .join('\n')
+                ),
+            };
+        args[0] = args[0].toLowerCase();
+        if (Settings.hasOwnProperty(args[0])) {
+            return await Settings[args[0]]();
+        } else {
+            return {
+                teks: TEKS[$.bahasa]['command/set/unknownsetting'].replace('%set', args[0]).replace(
+                    '%list',
+                    Object.keys(Settings)
+                        .map((v) => '/set ' + v)
+                        .join('\n')
+                ),
+            };
+        }
     },
     setpremiumuser: async ($) => {
         if (!cekDev($.uid)) return { teks: TEKS[$.bahasa]['permission/devonly'] };

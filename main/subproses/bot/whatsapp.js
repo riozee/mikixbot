@@ -400,6 +400,10 @@ process.on('message', (pesan) => {
                 IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
             } else if (pesan._.hasOwnProperty('unduh')) {
                 IPC.terimaDanBalasKueri(pesan, async (pesan) => ({ file: await unduhMedia(pesan._.unduh) }));
+            } else if (pesan._.hasOwnProperty('isAdmin')) {
+                IPC.terimaDanBalasKueri(pesan, async (pesan) => ({
+                    admin: Boolean((await bot.groupMetadata(ID(pesan._.isAdmin.c))).participants.filter((v) => v.id === ID(pesan._.isAdmin.u))[0]?.admin),
+                }));
             }
         } else if (pesan._.hasOwnProperty('penerima')) {
             IPC.terimaSinyal(pesan, (pesan) => kirimPesan(pesan));

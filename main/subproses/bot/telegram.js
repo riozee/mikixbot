@@ -291,6 +291,10 @@ process.on('message', (pesan) => {
                 IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
             } else if (pesan._.hasOwnProperty('unduh')) {
                 IPC.terimaDanBalasKueri(pesan, async (pesan) => ({ file: await unduhMedia(pesan._.unduh) }));
+            } else if (pesan._.hasOwnProperty('isAdmin')) {
+                IPC.terimaDanBalasKueri(pesan, async (pesan) => ({
+                    admin: (await bot.telegram.getChatAdministrators(ID(pesan._.isAdmin.c))).map((v) => String(v.user.id)).includes(ID(pesan._.isAdmin.u)),
+                }));
             }
         } else if (pesan._.hasOwnProperty('penerima')) {
             IPC.terimaSinyal(pesan, (pesan) => kirimPesan(pesan));
