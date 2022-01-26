@@ -77,3 +77,5 @@ exports.jalankanFn = async function (fn) {
 exports.jeda = (milidetik) => {
     return new Promise((res) => setTimeout(res, milidetik));
 };
+
+exports.namaFileAcak = () => `${Date.now()}#${Math.random().toString(36).slice(2)}`;

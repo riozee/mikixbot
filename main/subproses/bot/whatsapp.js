@@ -479,6 +479,3 @@ if (argv.watch) {
         process.exit();
     });
 }
-
-// "fix" this.isZero error
-require('long').prototype.toString = () => String(Date.now());

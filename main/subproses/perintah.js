@@ -2,6 +2,7 @@ const utils = require('../utils');
 const IPC = new utils.IPC('PR', process);
 
 const fs = require('fs');
+const cp = require('child_process');
 const util = require('util');
 const _ = require('lodash');
 const fetch = require('node-fetch');
@@ -371,6 +372,47 @@ const Perintah = {
         }
         return { teks: TEKS[$.bahasa]['anonymouschat/notinanyroom'] };
     },
+    convert: async ($) => {
+        const Format = {
+            mp3: async () => {
+                const media = $.video || $.dokumen || $.audio || $.q?.video || $.q?.dokumen || $.q?.audio;
+                if (!media) return { teks: TEKS[$.bahasa]['command/convert/mp3/notsupported'] };
+                const { file, _e } = await unduh($.pengirim, media);
+                if (_e) throw _e;
+                const output = await new Promise((resolve, reject) => {
+                    const out = `./tmp/${utils.namaFileAcak()}.mp3`;
+                    cp.exec(`ffmpeg -i ${file} ${out}`, (eror) => {
+                        if (eror) return reject(eror);
+                        resolve(out);
+                    });
+                });
+                return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') } };
+            },
+        };
+
+        if (!$.argumen)
+            return {
+                teks: TEKS[$.bahasa]['command/convert/noargs'].replace(
+                    '%formats',
+                    Object.keys(Format)
+                        .map((v) => '/convert ' + v)
+                        .join('\n')
+                ),
+            };
+        const format = $.argumen.trim().toLowerCase();
+        if (Format.hasOwnProperty(format)) {
+            return await Format[format]();
+        } else {
+            return {
+                teks: TEKS[$.bahasa]['command/convert/unknownformat'].replace(
+                    '%formats',
+                    Object.keys(Format)
+                        .map((v) => '/convert ' + v)
+                        .join('\n')
+                ),
+            };
+        }
+    },
     eval: async ($) => {
         if (!cekDev($.uid)) {
             return {
@@ -514,6 +556,9 @@ const Perintah = {
     },
     set: async ($, data) => {
         if (!data.u) return { teks: TEKS[$.bahasa]['permission/registeredonly'] };
+        const args = $.argumen.split(/\s+/);
+        const argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp(args[0])}\\s*`), '');
+
         const Settings = {
             lang: async () => {
                 if ($.pengirim.endsWith('#C')) {
@@ -528,9 +573,14 @@ const Perintah = {
                 if (_e) throw _e;
                 return { teks: TEKS[args[1]]['command/set/lang/done'].replace('%lang', args[1]) };
             },
+            name: async () => {
+                if (!argumen) return { teks: TEKS[$.bahasa]['command/set/name/noargs'] };
+                const { _e } = await DB.perbarui({ _id: $.uid }, { $set: { name: argumen } });
+                if (_e) throw _e;
+                return { teks: TEKS[$.bahasa]['command/set/name/done'].replace('%old', data.u.name).replace('%new', argumen) };
+            },
         };
 
-        const args = $.argumen.split(/\s+/);
         if (!args[0])
             return {
                 teks: TEKS[$.bahasa]['command/set/noargs'].replace(
@@ -585,6 +635,54 @@ const Perintah = {
                 .replace('%date', new Date(perpanjang ? udata.expiration + +durasi : Date.now() + +durasi)),
         };
     },
+    sticker: async ($, data) => {
+        if (!$.pengirim.startsWith('WA#')) return { teks: TEKS[$.bahasa]['command/sticker/onlywhatsapp'] };
+        if ($.gambar || $.q?.gambar) {
+            const gambar = $.gambar || $.q?.gambar;
+            if (gambar.ukuran > 1000000) return { teks: TEKS[$.bahasa]['command/sticker/sizetoolarge'] };
+            const { file, _e } = await unduh($.pengirim, gambar);
+            if (_e) throw _e;
+            let _webp = await webp.keWebp(file, 'jpg');
+            _webp = await webp.setExif(_webp, 'Miki Bot', 'multiplatform chatbot by RiozeC');
+            return { stiker: { file: _webp } };
+        } else if ($.video || $.q?.video) {
+            const video = $.video || $.q?.video;
+            if (video.ukuran > 1000000) return { teks: TEKS[$.bahasa]['command/sticker/sizetoolarge'] };
+            const { file, _e } = await unduh($.pengirim, video);
+            if (_e) throw _e;
+            let _webp = await webp.keWebp(file, 'mp4');
+            _webp = await webp.setExif(_webp, 'Miki Bot', 'multiplatform chatbot by RiozeC');
+            return { stiker: { file: _webp } };
+        } else if ($.dokumen || $.q?.dokumen) {
+            const dokumen = $.dokumen || $.q?.dokumen;
+            if (dokumen.ukuran > 1000000) return { teks: TEKS[$.bahasa]['command/sticker/sizetoolarge'] };
+            if (!['jpg', 'png', 'gif', 'mp4', 'webp', 'mpeg', 'avi', 'ogv', 'webm', '3gp'].includes(dokumen.eks))
+                return { teks: TEKS[$.bahasa]['command/sticker/documentnotsupported'] };
+            const { file, _e } = await unduh($.pengirim, dokumen);
+            if (_e) throw _e;
+            let _webp = await webp.keWebp(file, dokumen.eks);
+            _webp = await webp.setExif(_webp, 'Miki Bot', 'multiplatform chatbot by RiozeC');
+            return { stiker: { file: _webp } };
+        } else {
+            return { teks: TEKS[$.bahasa]['command/sticker/medianotsupported'] };
+        }
+    },
+    unsticker: async ($) => {
+        const stiker = $.stiker || $.q?.stiker;
+        if (stiker.animasi) {
+            if ($.pengirim.startsWith('TG#')) return { teks: TEKS[$.bahasa]['command/unsticker/animatedstickertelegramnotsupported'] };
+            const { file, _e } = await unduh($.pengirim, stiker);
+            if (_e) throw _e;
+            let output = await webp.keGif(file);
+            output = await gif.keMp4(output);
+            return { video: { file: output, gif: true } };
+        } else {
+            const { file, _e } = await unduh($.pengirim, stiker);
+            if (_e) throw _e;
+            const output = await webp.kePng(file);
+            return { gambar: { file: output } };
+        }
+    },
     uppercase: ($) => {
         if ($.arg) {
             return {
@@ -599,6 +697,12 @@ const Perintah = {
 };
 
 //////////////////// FUNGSI PEMBANTU
+
+function unduh(penerima, media) {
+    return IPC.kirimKueri(penerima.split('#')[0], {
+        unduh: media,
+    });
+}
 
 function kirimPesan(penerima, pesan) {
     return IPC.kirimSinyal(penerima.split('#')[0], {
