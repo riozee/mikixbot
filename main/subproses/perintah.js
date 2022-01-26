@@ -437,7 +437,7 @@ const Perintah = {
                 return {
                     teks: Object.entries(map)
                         .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + v[1].join('\n'))
+                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
                         .join('\n\n'),
                 };
             }
@@ -495,71 +495,66 @@ const Perintah = {
         stx: '/kbbi [word]',
         cat: 'information',
         fn: async ($) => {
-            if ($.arg) {
-                try {
-                    const [ANTONIM, GABUNGANKATA, KATATURUNAN, ARTI, PERIBAHASA, TERKAIT, LIHATJUGA, SINONIM, TRANSLASI] = $.TEKS('command/kbbi/$words')
-                        .split('|')
-                        .map((v) => v.trim());
-                    const f = await fetch('https://kateglo.com/api.php?format=json&phrase=' + encodeURIComponent($.arg.trim()));
-                    const res = (await f.json()).kateglo;
-                    const kata = res.phrase ? res.phrase.toUpperCase() : res.phrase;
-                    const akar = res.root[0] ? res.root.map((v) => v.root_phrase).join(' -> ') : '';
-                    const kelasLeksikal =
-                        res.lex_class_name || res.lex_class_ref ? (res.lex_class_name || res.lex_class_ref).toLowerCase() : res.lex_class_name || res.lex_class_ref;
-                    let definisi = '';
-                    (res.definition || []).forEach((v, i) => {
-                        let teks = `\n${v.def_num || i + 1}. ${v.discipline ? `[${v.discipline}] ` : ''}${v.def_text}`;
-                        if (v.sample) teks += `\n=> ${v.sample}`;
-                        if (v.see) teks += `\n${LIHATJUGA}: ${v.see}`;
-                        definisi += teks;
-                    });
-                    const sinonim = Object.values(res.relation?.s || {})
-                        .filter((v) => v.related_phrase)
-                        .map((v) => v.related_phrase)
-                        .join(', ');
-                    const antonim = Object.values(res.relation?.a || {})
-                        .filter((v) => v.related_phrase)
-                        .map((v) => v.related_phrase)
-                        .join(', ');
-                    const terkait = Object.values(res.relation?.r || {})
-                        .filter((v) => v.related_phrase)
-                        .map((v) => v.related_phrase)
-                        .join(', ');
-                    const kataTurunan = Object.values(res.relation?.d || {})
-                        .filter((v) => v.related_phrase)
-                        .map((v) => v.related_phrase)
-                        .join(', ');
-                    const gabunganKata = Object.values(res.relation?.c || {})
-                        .filter((v) => v.related_phrase)
-                        .map((v) => v.related_phrase)
-                        .join(', ');
-                    const translasi = (res.translations || []).map((v) => `• [${v.ref_source}] ${v.translation}`).join('\n');
-                    let peribahasa = '';
-                    (res.proverbs || []).forEach((v) => {
-                        peribahasa += `\n• ${v.proverb}\n${ARTI}: ${v.meaning}`;
-                    });
-                    const others = [
-                        sinonim ? `${SINONIM}: ${sinonim.trim()}` : '',
-                        antonim ? `${ANTONIM}: ${antonim.trim()}` : '',
-                        terkait ? `${TERKAIT}: ${terkait.trim()}` : '',
-                        kataTurunan ? `${KATATURUNAN}: ${kataTurunan.trim()}` : '',
-                        gabunganKata ? `${GABUNGANKATA}: ${gabunganKata.trim()}` : '',
-                        peribahasa ? `${PERIBAHASA}:\n${peribahasa.trim()}` : '',
-                        translasi ? `${TRANSLASI}:\n${translasi.trim()}` : '',
-                    ]
-                        .filter((v) => v)
-                        .join('\n\n');
-                    return {
-                        teks: `${akar ? `${akar} -> ` : ''}${kata} [${kelasLeksikal}]\n\n\n${definisi.trim()}\n\n${others}`,
-                    };
-                } catch (eror) {
-                    return {
-                        teks: $.TEKS('command/kbbi/error') + '\n\n' + String(eror),
-                    };
-                }
-            } else {
+            if (!$.arg) return { teks: $.TEKS('command/kbbi') };
+            try {
+                const [ANTONIM, GABUNGANKATA, KATATURUNAN, ARTI, PERIBAHASA, TERKAIT, LIHATJUGA, SINONIM, TRANSLASI] = $.TEKS('command/kbbi/$words')
+                    .split('|')
+                    .map((v) => v.trim());
+                const f = await fetch('https://kateglo.com/api.php?format=json&phrase=' + encodeURIComponent($.arg.trim()));
+                const res = (await f.json()).kateglo;
+                const kata = res.phrase ? res.phrase.toUpperCase() : res.phrase;
+                const akar = res.root[0] ? res.root.map((v) => v.root_phrase).join(' -> ') : '';
+                const kelasLeksikal =
+                    res.lex_class_name || res.lex_class_ref ? (res.lex_class_name || res.lex_class_ref).toLowerCase() : res.lex_class_name || res.lex_class_ref;
+                let definisi = '';
+                (res.definition || []).forEach((v, i) => {
+                    let teks = `\n${v.def_num || i + 1}. ${v.discipline ? `[${v.discipline}] ` : ''}${v.def_text}`;
+                    if (v.sample) teks += `\n=> ${v.sample}`;
+                    if (v.see) teks += `\n${LIHATJUGA}: ${v.see}`;
+                    definisi += teks;
+                });
+                const sinonim = Object.values(res.relation?.s || {})
+                    .filter((v) => v.related_phrase)
+                    .map((v) => v.related_phrase)
+                    .join(', ');
+                const antonim = Object.values(res.relation?.a || {})
+                    .filter((v) => v.related_phrase)
+                    .map((v) => v.related_phrase)
+                    .join(', ');
+                const terkait = Object.values(res.relation?.r || {})
+                    .filter((v) => v.related_phrase)
+                    .map((v) => v.related_phrase)
+                    .join(', ');
+                const kataTurunan = Object.values(res.relation?.d || {})
+                    .filter((v) => v.related_phrase)
+                    .map((v) => v.related_phrase)
+                    .join(', ');
+                const gabunganKata = Object.values(res.relation?.c || {})
+                    .filter((v) => v.related_phrase)
+                    .map((v) => v.related_phrase)
+                    .join(', ');
+                const translasi = (res.translations || []).map((v) => `• [${v.ref_source}] ${v.translation}`).join('\n');
+                let peribahasa = '';
+                (res.proverbs || []).forEach((v) => {
+                    peribahasa += `\n• ${v.proverb}\n${ARTI}: ${v.meaning}`;
+                });
+                const others = [
+                    sinonim ? `${SINONIM}: ${sinonim.trim()}` : '',
+                    antonim ? `${ANTONIM}: ${antonim.trim()}` : '',
+                    terkait ? `${TERKAIT}: ${terkait.trim()}` : '',
+                    kataTurunan ? `${KATATURUNAN}: ${kataTurunan.trim()}` : '',
+                    gabunganKata ? `${GABUNGANKATA}: ${gabunganKata.trim()}` : '',
+                    peribahasa ? `${PERIBAHASA}:\n${peribahasa.trim()}` : '',
+                    translasi ? `${TRANSLASI}:\n${translasi.trim()}` : '',
+                ]
+                    .filter((v) => v)
+                    .join('\n\n');
                 return {
-                    teks: $.TEKS('command/kbbi'),
+                    teks: `${akar ? `${akar} -> ` : ''}${kata} [${kelasLeksikal}]\n\n\n${definisi.trim()}\n\n${others}`,
+                };
+            } catch (eror) {
+                return {
+                    teks: $.TEKS('command/kbbi/error') + '\n\n' + String(eror),
                 };
             }
         },
@@ -599,7 +594,7 @@ const Perintah = {
                     '%',
                     Object.entries(map)
                         .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + v[1].join('\n'))
+                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
                         .join('\n\n')
                 ),
             };
@@ -701,7 +696,7 @@ const Perintah = {
                 return {
                     teks: Object.entries(map)
                         .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + v[1].join('\n'))
+                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
                         .join('\n\n'),
                 };
             }
@@ -709,7 +704,7 @@ const Perintah = {
             if (!args[0]) return list();
             args[0] = args[0].toLowerCase();
             if (Pengaturan.hasOwnProperty(args[0])) {
-                return await Pengaturan[args[0]]();
+                return await Pengaturan[args[0]].fn();
             } else return list();
         },
     },
