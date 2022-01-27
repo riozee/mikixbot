@@ -12,6 +12,7 @@ const webp = require('../alat/webp_konversi');
 
 //////////////////// VARS
 
+const pid = Math.random().toString(36).slice(2);
 const argv = JSON.parse(process.argv[2]);
 const TEKS = {};
 
@@ -40,20 +41,39 @@ async function proses(pesan) {
         u: pesan._.pengirim !== pesan._.uid ? (await DB.cari({ _id: pesan._.uid })).hasil : c,
     };
 
-    pesan._.bahasa = data.c?.lang || 'en';
+    const $ = pesan._;
+    $.platform = pesan.d;
+    $.bahasa = data.c?.lang || 'en';
 
-    pesan._.TEKS = (teks) => TEKS[pesan._.bahasa][teks];
+    $.TEKS = (teks) => TEKS[$.bahasa][teks];
 
     ////////// ANONYMOUS CHAT
-    if (!pesan._.pengirim.endsWith('#C') && cache.data.anch?.active?.includes?.(pesan._.uid)) {
+    if (!$.pengirim.endsWith('#C') && cache.data.anch?.active?.includes?.($.uid)) {
         anch(pesan, data);
     }
+    ////////// INPUT
+    else if (cache.data.waiter && cache.data.waiter[$.uid] && cache.data.waiter[$.uid]._in === $.pengirim) {
+        const cdw = cache.data.waiter[$.uid];
+        const handler = cdw._handler;
+        let r;
+        if ((r = Perintah[handler[0]]?._?.[handler[1]]?.hd)) {
+            if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&.][a-zA-Z0-9]+\s*/.test($.teks)) {
+                const _perintah = $.teks.split(/\s+/)[0];
+                $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
+                $.perintah = _perintah.slice(1).toLowerCase();
+                $.arg = $.argumen || $.q?.teks || '';
+                $.args = $.argumen.split(/\s+/);
+            }
+            r = await r(cdw, $, data);
+            if (r) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
+        }
+    }
     ////////// PERINTAH
-    else if (pesan._.teks) {
-        if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test(pesan._.teks)) {
-            perintah(pesan, data);
+    else if ($.teks) {
+        if (/^[\/\-\\><+_=|~!?@#$%^&.][a-zA-Z0-9]+\s*/.test($.teks)) {
+            return perintah(pesan, data);
         } else {
-            log(3, pesan._.teks);
+            log(3, $.teks);
         }
     }
 }
@@ -245,37 +265,53 @@ async function validasiGrup($, data) {
     else return false;
 }
 
-async function validasiUser($, uid, data) {
+async function validasiUser($, data) {
     let r = false;
     if (!cache.data.cdcmd) cache.data.cdcmd = {};
     const cdcmd = cache.data.cdcmd;
-    if (!cdcmd[uid]) cdcmd[uid] = 0;
-    console.log(cdcmd, data.u);
+    if (!cdcmd[$.uid]) cdcmd[$.uid] = 0;
     if (!data.u || data.u.premlvl === 0 || Date.now() > +data.u.expiration) {
         // FREE USER
-        if (Date.now() - cdcmd[uid] < 5000) r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5') };
+        if (Date.now() - cdcmd[$.uid] < 5000) r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5') };
     } else {
         if (data.u.premlvl === 1) {
             // PREMIUM LITE
-            if (Date.now() - cdcmd[uid] < 1500) r = { teks: $.TEKS('user/cdcommandreached').replace('%lvl', 'Premium Lite').replace('%dur', '1.5') };
+            if (Date.now() - cdcmd[$.uid] < 1500) r = { teks: $.TEKS('user/cdcommandreached').replace('%lvl', 'Premium Lite').replace('%dur', '1.5') };
         } else if (data.u.premlvl === 2) {
             // PREMIUM XTREME
         }
     }
-    cdcmd[uid] = Date.now();
+    cdcmd[$.uid] = Date.now();
     return r;
+}
+
+function cekLimit($, data) {
+    const now = Date.now();
+    if (!cache.data.usrlimit) cache.data.usrlimit = { update: now };
+    const usrlimit = cache.data.usrlimit;
+    if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
+    return {
+        val: data.u?.premlvl !== 0 ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 10),
+        kurangi: () => {
+            if (data.u?.premlvl === 0 && usrlimit[$.uid] > 0) {
+                usrlimit[$.uid] -= 1;
+                return kirimPesan($.pengirim, { teks: $.TEKS('user/limitnotice').replace('%lim', usrlimit[$.uid]), re: true, mid: $.mid });
+            }
+        },
+        habis: { teks: $.TEKS('user/limitreached') },
+    };
 }
 
 //////////////////// PERINTAH-PERINTAH
 
 async function perintah(pesan, data) {
     const $ = pesan._;
-    const _perintah = $.teks.split(/\s+/)[0];
     $.platform = pesan.d;
-
+    const _perintah = $.teks.split(/\s+/)[0];
     $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
     $.perintah = _perintah.slice(1).toLowerCase();
     $.arg = $.argumen || $.q?.teks || '';
+    $.args = $.argumen.split(/\s+/);
 
     log(2, $.teks);
     if ($.perintah === 'getid') return kirimPesan($.pengirim, { teks: $.pengirim, re: true, mid: $.mid });
@@ -337,10 +373,10 @@ const Perintah = {
                 perpanjang = true;
                 durasi = durasi.slice(1);
             }
-            if (isNaN(+durasi)) return { teks: $.TEKS('command/setgroupsubscription') };
             if (durasi.endsWith('d')) {
-                durasi = `${+durasi * 86_400_000}`;
+                durasi = `${+durasi.slice(0, -1) * 86_400_000}`;
             }
+            if (isNaN(+durasi)) return { teks: $.TEKS('command/setgroupsubscription') };
             let e;
             const cdata = (await DB.cari({ _id: id })).hasil;
             if (cdata) e = await DB.perbarui({ _id: id }, { $set: { expiration: perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi } });
@@ -401,27 +437,6 @@ const Perintah = {
         stx: '/convert >>',
         cat: 'converter',
         fn: async ($) => {
-            const Format = {
-                mp3: {
-                    stx: '/convert mp3',
-                    cat: 'audio',
-                    fn: async () => {
-                        const media = $.video || $.dokumen || $.audio || $.q?.video || $.q?.dokumen || $.q?.audio;
-                        if (!media) return { teks: $.TEKS('command/convert/mp3/notsupported') };
-                        const { file, _e } = await unduh($.pengirim, media);
-                        if (_e) throw _e;
-                        const output = await new Promise((resolve, reject) => {
-                            const out = `./tmp/${utils.namaFileAcak()}.mp3`;
-                            cp.exec(`ffmpeg -i ${file} ${out}`, (eror) => {
-                                if (eror) return reject(eror);
-                                resolve(out);
-                            });
-                        });
-                        return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') } };
-                    },
-                },
-            };
-
             function list() {
                 const map = {};
                 const cats = Object.fromEntries(
@@ -429,10 +444,10 @@ const Perintah = {
                         .split('\n')
                         .map((v) => v.split('='))
                 );
-                for (const cmd in Format) {
-                    const cat = cats[Format[cmd].cat];
+                for (const cmd in Perintah.convert._) {
+                    const cat = cats[Perintah.convert._[cmd].cat];
                     if (!map[cat]) map[cat] = [];
-                    map[cat].push(Format[cmd].stx);
+                    map[cat].push(Perintah.convert._[cmd].stx);
                 }
                 return {
                     teks: Object.entries(map)
@@ -443,10 +458,30 @@ const Perintah = {
             }
 
             if (!$.argumen) return list();
-            const format = $.argumen.trim().toLowerCase();
-            if (Format.hasOwnProperty(format)) {
-                return await Format[format].fn();
+            const format = $.args[0].toLowerCase();
+            if (Perintah.convert._.hasOwnProperty(format)) {
+                return await Perintah.convert._[format].fn($);
             } else return list();
+        },
+        _: {
+            mp3: {
+                stx: '/convert mp3',
+                cat: 'audio',
+                fn: async ($) => {
+                    const media = $.video || $.dokumen || $.audio || $.q?.video || $.q?.dokumen || $.q?.audio;
+                    if (!media) return { teks: $.TEKS('command/convert/mp3/notsupported') };
+                    const { file, _e } = await unduh($.pengirim, media);
+                    if (_e) throw _e;
+                    const output = await new Promise((resolve, reject) => {
+                        const out = `./tmp/${utils.namaFileAcak()}.mp3`;
+                        cp.exec(`ffmpeg -i ${file} ${out}`, (eror) => {
+                            if (eror) return reject(eror);
+                            resolve(out);
+                        });
+                    });
+                    return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') } };
+                },
+            },
         },
     },
     eval: {
@@ -473,6 +508,75 @@ const Perintah = {
                     teks: util.format(hasil),
                 };
             }
+        },
+    },
+    game: {
+        stx: '/game >>',
+        cat: 'fun',
+        fn: async ($, data) => {
+            function list() {
+                const map = {};
+                const cats = Object.fromEntries(
+                    $.TEKS('command/game/$categories')
+                        .split('\n')
+                        .map((v) => v.split('='))
+                );
+                for (const cmd in Perintah.game._) {
+                    const cat = cats[Perintah.game._[cmd].cat];
+                    if (!map[cat]) map[cat] = [];
+                    map[cat].push(Perintah.game._[cmd].stx);
+                }
+                return {
+                    teks: Object.entries(map)
+                        .sort(() => _.random(-1, 1))
+                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
+                        .join('\n\n'),
+                };
+            }
+
+            if (!$.argumen) return list();
+            const game = $.args[0].toLowerCase();
+            if (Perintah.game._.hasOwnProperty(game)) {
+                $._argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp($.args[0])}\\s*`), '');
+                return await Perintah.game._[game].fn($, data);
+            } else return list();
+        },
+        _: {
+            asahotak: {
+                stx: '/game asahotak',
+                cat: 'indonesian',
+                fn: async ($) => {
+                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game asahotak') };
+                    cache.data.asahotak ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/asahotak.json');
+                    const soal = _.sample(cache.data.asahotak);
+                    cache.data.waiter[$.uid] = {
+                        _in: $.pengirim,
+                        _handler: ['game', 'asahotak'],
+                        jawaban: soal.jawaban.trim().toLowerCase(),
+                        retries: 5,
+                    };
+                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
+                },
+                hd: (wdata, $) => {
+                    if ($.teks) {
+                        if ($.perintah === 'cancel') {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
+                        }
+                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
+                        } else {
+                            if (--wdata.retries > 0) {
+                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
+                            } else {
+                                delete cache.data.waiter[$.uid];
+                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
+                            }
+                        }
+                    }
+                },
+            },
         },
     },
     getid: {
@@ -649,37 +753,6 @@ const Perintah = {
         cat: 'bot',
         fn: async ($, data) => {
             if (!data.u) return { teks: $.TEKS('permission/registeredonly') };
-            const args = $.argumen.split(/\s+/);
-            const argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp(args[0])}\\s*`), '');
-
-            const Pengaturan = {
-                lang: {
-                    stx: '/set lang [lc]',
-                    cat: 'userinterface',
-                    fn: async () => {
-                        if ($.pengirim.endsWith('#C')) {
-                            if (!(await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin) return { teks: $.TEKS('permission/adminonly') };
-                        }
-                        const langs = Object.keys(TEKS);
-                        if (!args[1]) return { teks: $.TEKS('command/set/lang') };
-                        args[1] = args[1].toLowerCase();
-                        if (!langs.includes(args[1])) return { teks: $.TEKS('command/set/lang') };
-                        const { _e } = await DB.perbarui({ _id: $.pengirim.endsWith('#C') ? $.pengirim : $.uid }, { $set: { lang: args[1] } });
-                        if (_e) throw _e;
-                        return { teks: TEKS[args[1]]['command/set/lang/done'].replace('%lang', args[1]) };
-                    },
-                },
-                name: {
-                    stx: '/set name [name]',
-                    cat: 'userdata',
-                    fn: async () => {
-                        if (!argumen || argumen.length > 25) return { teks: $.TEKS('command/set/name') };
-                        const { _e } = await DB.perbarui({ _id: $.uid }, { $set: { name: argumen } });
-                        if (_e) throw _e;
-                        return { teks: $.TEKS('command/set/name/done').replace('%old', data.u.name).replace('%new', argumen) };
-                    },
-                },
-            };
 
             function list() {
                 const map = {};
@@ -688,10 +761,10 @@ const Perintah = {
                         .split('\n')
                         .map((v) => v.split('='))
                 );
-                for (const cmd in Pengaturan) {
-                    const cat = cats[Pengaturan[cmd].cat];
+                for (const cmd in Perintah.set._) {
+                    const cat = cats[Perintah.set._[cmd].cat];
                     if (!map[cat]) map[cat] = [];
-                    map[cat].push(Pengaturan[cmd].stx);
+                    map[cat].push(Perintah.set._[cmd].stx);
                 }
                 return {
                     teks: Object.entries(map)
@@ -701,11 +774,40 @@ const Perintah = {
                 };
             }
 
-            if (!args[0]) return list();
-            args[0] = args[0].toLowerCase();
-            if (Pengaturan.hasOwnProperty(args[0])) {
-                return await Pengaturan[args[0]].fn();
+            if (!$.argumen) return list();
+            const setting = $.args[0].toLowerCase();
+            if (Perintah.set._.hasOwnProperty(setting)) {
+                $._argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp($.args[0])}\\s*`), '');
+                return await Perintah.set._[setting].fn($, data);
             } else return list();
+        },
+        _: {
+            lang: {
+                stx: '/set lang [lc]',
+                cat: 'userinterface',
+                fn: async ($) => {
+                    if ($.pengirim.endsWith('#C')) {
+                        if (!(await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin) return { teks: $.TEKS('permission/adminonly') };
+                    }
+                    const langs = Object.keys(TEKS);
+                    if (!$.args[1]) return { teks: $.TEKS('command/set/lang') };
+                    $.args[1] = $.args[1].toLowerCase();
+                    if (!langs.includes($.args[1])) return { teks: $.TEKS('command/set/lang') };
+                    const { _e } = await DB.perbarui({ _id: $.pengirim.endsWith('#C') ? $.pengirim : $.uid }, { $set: { lang: $.args[1] } });
+                    if (_e) throw _e;
+                    return { teks: TEKS[$.args[1]]['command/set/lang/done'].replace('%lang', $.args[1]) };
+                },
+            },
+            name: {
+                stx: '/set name [name]',
+                cat: 'userdata',
+                fn: async ($, data) => {
+                    if (!$._argumen || $._argumen.length > 25) return { teks: $.TEKS('command/set/name') };
+                    const { _e } = await DB.perbarui({ _id: $.uid }, { $set: { name: $._argumen } });
+                    if (_e) throw _e;
+                    return { teks: $.TEKS('command/set/name/done').replace('%old', data.u.name).replace('%new', $._argumen) };
+                },
+            },
         },
     },
     setpremiumuser: {
@@ -721,10 +823,10 @@ const Perintah = {
                 perpanjang = true;
                 durasi = durasi.slice(1);
             }
-            if (+level !== 0 && isNaN(+durasi)) return { teks: $.TEKS('command/setpremiumuser') };
-            if (durasi.endsWith('d')) {
-                durasi = `${+durasi * 86_400_000}`;
+            if (durasi?.endsWith?.('d')) {
+                durasi = `${+durasi.slice(0, -1) * 86_400_000}`;
             }
+            if (level !== '0' && isNaN(+durasi)) return { teks: $.TEKS('command/setpremiumuser') };
             const udata = (await DB.cari({ _id: id })).hasil;
             let e;
             if (udata) e = await DB.perbarui({ _id: id }, { $set: { premlvl: +level, expiration: perpanjang ? udata.expiration + +durasi : Date.now() + +durasi } });
@@ -820,6 +922,17 @@ const Perintah = {
 };
 
 //////////////////// FUNGSI PEMBANTU
+
+function addWaiter(fn) {
+    const id = Math.random().toString(36).slice(2);
+    if (!cache.data.waiter) cache.data.waiter = {};
+    waiter[id] = fn;
+    cache.data.waiter[id] = fn.toString();
+}
+
+async function fetchJSON(link) {
+    return await (await fetch(link)).json();
+}
 
 function unduh(penerima, media) {
     return IPC.kirimKueri(penerima.split('#')[0], {
