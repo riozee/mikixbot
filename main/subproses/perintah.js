@@ -577,6 +577,42 @@ const Perintah = {
                     }
                 },
             },
+            caklontong: {
+                stx: '/game caklontong',
+                cat: 'indonesian',
+                fn: async ($) => {
+                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game caklontong') };
+                    cache.data.caklontong ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/caklontong.json');
+                    const soal = _.sample(cache.data.caklontong);
+                    cache.data.waiter[$.uid] = {
+                        _in: $.pengirim,
+                        _handler: ['game', 'caklontong'],
+                        jawaban: soal.jawaban.trim().toLowerCase(),
+                        deskripsi: soal.deskripsi,
+                        retries: 5,
+                    };
+                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
+                },
+                hd: (wdata, $) => {
+                    if ($.teks) {
+                        if ($.perintah === 'cancel') {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                        }
+                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                        } else {
+                            if (--wdata.retries > 0) {
+                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
+                            } else {
+                                delete cache.data.waiter[$.uid];
+                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                            }
+                        }
+                    }
+                },
+            },
         },
     },
     getid: {
