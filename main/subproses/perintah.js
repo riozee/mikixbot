@@ -291,7 +291,7 @@ function cekLimit($, data) {
     const usrlimit = cache.data.usrlimit;
     if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
     return {
-        val: data.u?.premlvl !== 0 ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 10),
+        val: data.u?.premlvl !== 0 ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 5),
         kurangi: () => {
             if (data.u?.premlvl === 0 && usrlimit[$.uid] > 0) {
                 usrlimit[$.uid] -= 1;
@@ -608,6 +608,146 @@ const Perintah = {
                             } else {
                                 delete cache.data.waiter[$.uid];
                                 return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                            }
+                        }
+                    }
+                },
+            },
+            siapakahaku: {
+                stx: '/game siapakahaku',
+                cat: 'indonesian',
+                fn: async ($) => {
+                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game siapakahaku') };
+                    cache.data.siapakahaku ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/siapakahaku.json');
+                    const soal = _.sample(cache.data.siapakahaku);
+                    cache.data.waiter[$.uid] = {
+                        _in: $.pengirim,
+                        _handler: ['game', 'siapakahaku'],
+                        jawaban: soal.jawaban.trim().toLowerCase(),
+                        retries: 5,
+                    };
+                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
+                },
+                hd: (wdata, $) => {
+                    if ($.teks) {
+                        if ($.perintah === 'cancel') {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
+                        }
+                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
+                        } else {
+                            if (--wdata.retries > 0) {
+                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
+                            } else {
+                                delete cache.data.waiter[$.uid];
+                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
+                            }
+                        }
+                    }
+                },
+            },
+            susunkata: {
+                stx: '/game susunkata',
+                cat: 'indonesian',
+                fn: async ($) => {
+                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game susunkata') };
+                    cache.data.susunkata ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/susunkata.sjon');
+                    const soal = _.sample(cache.data.susunkata);
+                    cache.data.waiter[$.uid] = {
+                        _in: $.pengirim,
+                        _handler: ['game', 'susunkata'],
+                        jawaban: soal.jawaban.trim().toLowerCase(),
+                        retries: 5,
+                    };
+                    return { teks: $.TEKS('command/game/$question/start').replace('%q', `${soal.soal} (${soal.tipe})`) };
+                },
+                hd: (wdata, $) => {
+                    if ($.teks) {
+                        if ($.perintah === 'cancel') {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
+                        }
+                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
+                        } else {
+                            if (--wdata.retries > 0) {
+                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
+                            } else {
+                                delete cache.data.waiter[$.uid];
+                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
+                            }
+                        }
+                    }
+                },
+            },
+            tebaklirik: {
+                stx: '/game tebaklirik',
+                cat: 'indonesian',
+                fn: async ($) => {
+                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaklirik') };
+                    cache.data.tebaklirik ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaklirik.json');
+                    const soal = _.sample(cache.data.tebaklirik);
+                    cache.data.waiter[$.uid] = {
+                        _in: $.pengirim,
+                        _handler: ['game', 'tebaklirik'],
+                        jawaban: soal.jawaban.trim().toLowerCase(),
+                        retries: 5,
+                    };
+                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
+                },
+                hd: (wdata, $) => {
+                    if ($.teks) {
+                        if ($.perintah === 'cancel') {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
+                        }
+                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
+                        } else {
+                            if (--wdata.retries > 0) {
+                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
+                            } else {
+                                delete cache.data.waiter[$.uid];
+                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
+                            }
+                        }
+                    }
+                },
+            },
+            tebaktebakan: {
+                stx: '/game tebaktebakan',
+                cat: 'indonesian',
+                fn: async ($) => {
+                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaktebakan') };
+                    cache.data.tebaktebakan ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaktebakan.json');
+                    const soal = _.sample(cache.data.tebaktebakan);
+                    cache.data.waiter[$.uid] = {
+                        _in: $.pengirim,
+                        _handler: ['game', 'tebaktebakan'],
+                        jawaban: soal.jawaban.trim().toLowerCase(),
+                        retries: 5,
+                    };
+                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
+                },
+                hd: (wdata, $) => {
+                    if ($.teks) {
+                        if ($.perintah === 'cancel') {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
+                        }
+                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                            delete cache.data.waiter[$.uid];
+                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
+                        } else {
+                            if (--wdata.retries > 0) {
+                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
+                            } else {
+                                delete cache.data.waiter[$.uid];
+                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
                             }
                         }
                     }
