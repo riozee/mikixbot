@@ -53,19 +53,24 @@ async function proses(pesan) {
     }
     ////////// INPUT
     else if (cache.data.waiter && cache.data.waiter[$.uid] && cache.data.waiter[$.uid]._in === $.pengirim) {
-        const cdw = cache.data.waiter[$.uid];
-        const handler = cdw._handler;
-        let r;
-        if ((r = Perintah[handler[0]]?._?.[handler[1]]?.hd)) {
-            if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&.][a-zA-Z0-9]+\s*/.test($.teks)) {
-                const _perintah = $.teks.split(/\s+/)[0];
-                $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
-                $.perintah = _perintah.slice(1).toLowerCase();
-                $.arg = $.argumen || $.q?.teks || '';
-                $.args = $.argumen.split(/\s+/);
+        try {
+            const cdw = cache.data.waiter[$.uid];
+            const handler = cdw._handler;
+            let r;
+            if ((r = Perintah[handler[0]]?.hd || Perintah[handler[0]]?._?.[handler[1]]?.hd)) {
+                if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&.][a-zA-Z0-9]+\s*/.test($.teks)) {
+                    const _perintah = $.teks.split(/\s+/)[0];
+                    $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
+                    $.perintah = _perintah.slice(1).toLowerCase();
+                    $.arg = $.argumen || $.q?.teks || '';
+                    $.args = $.argumen.split(/\s+/);
+                }
+                r = await r(cdw, $, data);
+                if (r) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
             }
-            r = await r(cdw, $, data);
-            if (r) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
+        } catch (e) {
+            console.log(e);
+            return kirimPesan($.pengirim, { teks: $.TEKS('system/error').replace('%e', e), re: true, mid: $.mid });
         }
     }
     ////////// PERINTAH
@@ -291,7 +296,7 @@ function cekLimit($, data) {
     const usrlimit = cache.data.usrlimit;
     if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
     return {
-        val: data.u?.premlvl !== 0 ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 5),
+        val: data.u?.premlvl !== 0 ? 999 : usrlimit[$.uid] ?? (usrlimit[$.uid] = 5),
         kurangi: () => {
             if (data.u?.premlvl === 0 && usrlimit[$.uid] > 0) {
                 usrlimit[$.uid] -= 1;
@@ -447,7 +452,7 @@ const Perintah = {
                 for (const cmd in Perintah.convert._) {
                     const cat = cats[Perintah.convert._[cmd].cat];
                     if (!map[cat]) map[cat] = [];
-                    map[cat].push(Perintah.convert._[cmd].stx);
+                    map[cat].push((Perintah.convert._[cmd].lim ? '*' : '') + Perintah.convert._[cmd].stx);
                 }
                 return {
                     teks: Object.entries(map)
@@ -487,7 +492,7 @@ const Perintah = {
     eval: {
         stx: '/eval [js]',
         cat: 'dev',
-        fn: async ($) => {
+        fn: async ($, data) => {
             if (!cekDev($.uid)) {
                 return {
                     teks: $.TEKS('permission/devonly'),
@@ -524,7 +529,7 @@ const Perintah = {
                 for (const cmd in Perintah.game._) {
                     const cat = cats[Perintah.game._[cmd].cat];
                     if (!map[cat]) map[cat] = [];
-                    map[cat].push(Perintah.game._[cmd].stx);
+                    map[cat].push((Perintah.game._[cmd].lim ? '*' : '') + Perintah.game._[cmd].stx);
                 }
                 return {
                     teks: Object.entries(map)
@@ -867,7 +872,7 @@ const Perintah = {
             for (const cmd in Perintah) {
                 const cat = cats[Perintah[cmd].cat];
                 if (!map[cat]) map[cat] = [];
-                map[cat].push(Perintah[cmd].stx);
+                map[cat].push((Perintah[cmd].lim ? '*' : '') + Perintah[cmd].stx);
             }
             return {
                 teks: $.TEKS('command/menu').replace(
@@ -940,7 +945,7 @@ const Perintah = {
                 for (const cmd in Perintah.set._) {
                     const cat = cats[Perintah.set._[cmd].cat];
                     if (!map[cat]) map[cat] = [];
-                    map[cat].push(Perintah.set._[cmd].stx);
+                    map[cat].push((Perintah.set._[cmd].lim ? '*' : '') + Perintah.set._[cmd].stx);
                 }
                 return {
                     teks: Object.entries(map)
@@ -1095,15 +1100,34 @@ const Perintah = {
             }
         },
     },
+    google: {
+        stx: '/google [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/google') };
+            const res = await (await lolHumanAPI('gsearch', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return { teks: res.result.map((v) => `• ${v.title}\n${v.link}\n${v.desc}`).join('\n\n') };
+        },
+    },
+    playstore: {
+        stx: '/playstore [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/playstore') };
+            const res = await (await lolHumanAPI('playstore', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result.map((v) => `• ${v.title} (${v.developer})\n${v.url}\n*${v.scoreText} - ${v.free ? 'Free' : v.priceText}\n${v.summary}`).join('\n\n'),
+            };
+        },
+    },
 };
 
 //////////////////// FUNGSI PEMBANTU
 
-function addWaiter(fn) {
-    const id = Math.random().toString(36).slice(2);
-    if (!cache.data.waiter) cache.data.waiter = {};
-    waiter[id] = fn;
-    cache.data.waiter[id] = fn.toString();
+function lolHumanAPI(API, ...params) {
+    return fetch(`https://api.lolhuman.xyz/api/${API}?apikey=${argv.lolHumanAPIkey}&${params.join('&')}`);
 }
 
 async function fetchJSON(link) {
