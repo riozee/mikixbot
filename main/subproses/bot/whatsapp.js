@@ -203,7 +203,7 @@ function mulai() {
                         1
                     );
                 },
-                60000,
+                60000 * 5,
                 `${pesan.key.id}`
             );
             IPC.kirimSinyal('PR', $pesan);

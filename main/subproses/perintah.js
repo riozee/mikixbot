@@ -343,7 +343,8 @@ async function perintah(pesan, data) {
             };
             log(5, hasil);
             logPesan(pesan.d, hasil, true);
-            return kirimPesan($.pengirim, hasil);
+            let { _e } = await _kirimPesan($.pengirim, hasil);
+            if (_e) throw _e;
         } catch (e) {
             log(6, $.teks);
             console.error(e);
@@ -451,55 +452,29 @@ const Perintah = {
             return { teks: $.TEKS('anonymouschat/notinanyroom') };
         },
     },
-    convert: {
-        stx: '/convert >>',
+    audioonly: {
+        stx: '/audioonly',
         cat: 'converter',
         fn: async ($) => {
-            function list() {
-                const map = {};
-                const cats = Object.fromEntries(
-                    $.TEKS('command/convert/$categories')
-                        .split('\n')
-                        .map((v) => v.split('='))
-                );
-                for (const cmd in Perintah.convert._) {
-                    const cat = cats[Perintah.convert._[cmd].cat];
-                    if (!map[cat]) map[cat] = [];
-                    map[cat].push((Perintah.convert._[cmd].lim ? '*' : '') + Perintah.convert._[cmd].stx);
-                }
-                return {
-                    teks: Object.entries(map)
-                        .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
-                        .join('\n\n'),
-                };
+            let media;
+            if ($.video || $.q?.video) {
+                media = $.video || $.q?.video;
+            } else if ($.dokumen || $.q?.dokumen) {
+                media = $.dokumen || $.q?.dokumen;
+                if (!['mp4', 'mpeg', 'avi', 'ogv', '3gp'].includes(media.eks)) return { teks: $.TEKS('command/audioonly/notsupported') };
+            } else {
+                return { teks: $.TEKS('command/audioonly/nomedia') };
             }
-
-            if (!$.argumen) return list();
-            const format = $.args[0].toLowerCase();
-            if (Perintah.convert._.hasOwnProperty(format)) {
-                return await Perintah.convert._[format].fn($);
-            } else return list();
-        },
-        _: {
-            mp3: {
-                stx: '/convert mp3',
-                cat: 'audio',
-                fn: async ($) => {
-                    const media = $.video || $.dokumen || $.audio || $.q?.video || $.q?.dokumen || $.q?.audio;
-                    if (!media) return { teks: $.TEKS('command/convert/mp3/notsupported') };
-                    const { file, _e } = await unduh($.pengirim, media);
-                    if (_e) throw _e;
-                    const output = await new Promise((resolve, reject) => {
-                        const out = `./tmp/${utils.namaFileAcak()}.mp3`;
-                        cp.exec(`ffmpeg -i ${file} ${out}`, (eror) => {
-                            if (eror) return reject(eror);
-                            resolve(out);
-                        });
-                    });
-                    return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') } };
-                },
-            },
+            const { file, _e } = await unduh($.pengirim, media);
+            if (_e) throw _e;
+            const output = await new Promise((resolve, reject) => {
+                const out = `./tmp/${utils.namaFileAcak()}.mp3`;
+                cp.exec(`ffmpeg -i ${file} ${out}`, (eror) => {
+                    if (eror) return reject(eror);
+                    resolve(out);
+                });
+            });
+            return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') } };
         },
     },
     eval: {
@@ -528,249 +503,227 @@ const Perintah = {
             }
         },
     },
-    game: {
-        stx: '/game >>',
-        cat: 'fun',
-        fn: async ($, data) => {
-            function list() {
-                const map = {};
-                const cats = Object.fromEntries(
-                    $.TEKS('command/game/$categories')
-                        .split('\n')
-                        .map((v) => v.split('='))
-                );
-                for (const cmd in Perintah.game._) {
-                    const cat = cats[Perintah.game._[cmd].cat];
-                    if (!map[cat]) map[cat] = [];
-                    map[cat].push((Perintah.game._[cmd].lim ? '*' : '') + Perintah.game._[cmd].stx);
-                }
-                return {
-                    teks: Object.entries(map)
-                        .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
-                        .join('\n\n'),
-                };
-            }
-
-            if (!$.argumen) return list();
-            const game = $.args[0].toLowerCase();
-            if (Perintah.game._.hasOwnProperty(game)) {
-                $._argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp($.args[0])}\\s*`), '');
-                return await Perintah.game._[game].fn($, data);
-            } else return list();
+    asahotak: {
+        stx: '/asahotak (Indonesia)',
+        cat: 'games',
+        fn: async ($) => {
+            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game asahotak') };
+            cache.data.asahotak ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/asahotak.json');
+            const soal = _.sample(cache.data.asahotak);
+            cache.data.waiter[$.uid] = {
+                _in: $.pengirim,
+                _handler: ['asahotak'],
+                jawaban: soal.jawaban.trim().toLowerCase(),
+                retries: 5,
+            };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
         },
-        _: {
-            asahotak: {
-                stx: '/game asahotak',
-                cat: 'indonesian',
-                fn: async ($) => {
-                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game asahotak') };
-                    cache.data.asahotak ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/asahotak.json');
-                    const soal = _.sample(cache.data.asahotak);
-                    cache.data.waiter[$.uid] = {
-                        _in: $.pengirim,
-                        _handler: ['game', 'asahotak'],
-                        jawaban: soal.jawaban.trim().toLowerCase(),
-                        retries: 5,
-                    };
-                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
-                },
-                hd: (wdata, $) => {
-                    if ($.teks) {
-                        if ($.perintah === 'cancel') {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
-                        }
-                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
-                        } else {
-                            if (--wdata.retries > 0) {
-                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
-                            } else {
-                                delete cache.data.waiter[$.uid];
-                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
-                            }
-                        }
+        hd: (wdata, $) => {
+            if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
+                }
+                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
+                } else {
+                    if (--wdata.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    } else {
+                        delete cache.data.waiter[$.uid];
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
                     }
-                },
-            },
-            caklontong: {
-                stx: '/game caklontong',
-                cat: 'indonesian',
-                fn: async ($) => {
-                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game caklontong') };
-                    cache.data.caklontong ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/caklontong.json');
-                    const soal = _.sample(cache.data.caklontong);
-                    cache.data.waiter[$.uid] = {
-                        _in: $.pengirim,
-                        _handler: ['game', 'caklontong'],
-                        jawaban: soal.jawaban.trim().toLowerCase(),
-                        deskripsi: soal.deskripsi,
-                        retries: 5,
-                    };
-                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
-                },
-                hd: (wdata, $) => {
-                    if ($.teks) {
-                        if ($.perintah === 'cancel') {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
-                        }
-                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
-                        } else {
-                            if (--wdata.retries > 0) {
-                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
-                            } else {
-                                delete cache.data.waiter[$.uid];
-                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
-                            }
-                        }
+                }
+            } else {
+                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/asahotak') };
+            }
+        },
+    },
+    caklontong: {
+        stx: '/caklontong (Indonesia)',
+        cat: 'games',
+        fn: async ($) => {
+            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game caklontong') };
+            cache.data.caklontong ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/caklontong.json');
+            const soal = _.sample(cache.data.caklontong);
+            cache.data.waiter[$.uid] = {
+                _in: $.pengirim,
+                _handler: ['caklontong'],
+                jawaban: soal.jawaban.trim().toLowerCase(),
+                deskripsi: soal.deskripsi,
+                retries: 5,
+            };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
+        },
+        hd: (wdata, $) => {
+            if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                }
+                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                } else {
+                    if (--wdata.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    } else {
+                        delete cache.data.waiter[$.uid];
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
                     }
-                },
-            },
-            siapakahaku: {
-                stx: '/game siapakahaku',
-                cat: 'indonesian',
-                fn: async ($) => {
-                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game siapakahaku') };
-                    cache.data.siapakahaku ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/siapakahaku.json');
-                    const soal = _.sample(cache.data.siapakahaku);
-                    cache.data.waiter[$.uid] = {
-                        _in: $.pengirim,
-                        _handler: ['game', 'siapakahaku'],
-                        jawaban: soal.jawaban.trim().toLowerCase(),
-                        retries: 5,
-                    };
-                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
-                },
-                hd: (wdata, $) => {
-                    if ($.teks) {
-                        if ($.perintah === 'cancel') {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
-                        }
-                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
-                        } else {
-                            if (--wdata.retries > 0) {
-                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
-                            } else {
-                                delete cache.data.waiter[$.uid];
-                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
-                            }
-                        }
+                }
+            } else {
+                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/caklontong') };
+            }
+        },
+    },
+    siapakahaku: {
+        stx: '/siapakahaku (Indonesia)',
+        cat: 'games',
+        fn: async ($) => {
+            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game siapakahaku') };
+            cache.data.siapakahaku ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/siapakahaku.json');
+            const soal = _.sample(cache.data.siapakahaku);
+            cache.data.waiter[$.uid] = {
+                _in: $.pengirim,
+                _handler: ['siapakahaku'],
+                jawaban: soal.jawaban.trim().toLowerCase(),
+                retries: 5,
+            };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
+        },
+        hd: (wdata, $) => {
+            if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
+                }
+                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
+                } else {
+                    if (--wdata.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    } else {
+                        delete cache.data.waiter[$.uid];
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
                     }
-                },
-            },
-            susunkata: {
-                stx: '/game susunkata',
-                cat: 'indonesian',
-                fn: async ($) => {
-                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game susunkata') };
-                    cache.data.susunkata ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/susunkata.sjon');
-                    const soal = _.sample(cache.data.susunkata);
-                    cache.data.waiter[$.uid] = {
-                        _in: $.pengirim,
-                        _handler: ['game', 'susunkata'],
-                        jawaban: soal.jawaban.trim().toLowerCase(),
-                        retries: 5,
-                    };
-                    return { teks: $.TEKS('command/game/$question/start').replace('%q', `${soal.soal} (${soal.tipe})`) };
-                },
-                hd: (wdata, $) => {
-                    if ($.teks) {
-                        if ($.perintah === 'cancel') {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
-                        }
-                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
-                        } else {
-                            if (--wdata.retries > 0) {
-                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
-                            } else {
-                                delete cache.data.waiter[$.uid];
-                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
-                            }
-                        }
+                }
+            } else {
+                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/siapakahaku') };
+            }
+        },
+    },
+    susunkata: {
+        stx: '/susunkata (Indonesia)',
+        cat: 'games',
+        fn: async ($) => {
+            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game susunkata') };
+            cache.data.susunkata ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/susunkata.sjon');
+            const soal = _.sample(cache.data.susunkata);
+            cache.data.waiter[$.uid] = {
+                _in: $.pengirim,
+                _handler: ['susunkata'],
+                jawaban: soal.jawaban.trim().toLowerCase(),
+                retries: 5,
+            };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', `${soal.soal} (${soal.tipe})`) };
+        },
+        hd: (wdata, $) => {
+            if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
+                }
+                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
+                } else {
+                    if (--wdata.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    } else {
+                        delete cache.data.waiter[$.uid];
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
                     }
-                },
-            },
-            tebaklirik: {
-                stx: '/game tebaklirik',
-                cat: 'indonesian',
-                fn: async ($) => {
-                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaklirik') };
-                    cache.data.tebaklirik ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaklirik.json');
-                    const soal = _.sample(cache.data.tebaklirik);
-                    cache.data.waiter[$.uid] = {
-                        _in: $.pengirim,
-                        _handler: ['game', 'tebaklirik'],
-                        jawaban: soal.jawaban.trim().toLowerCase(),
-                        retries: 5,
-                    };
-                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
-                },
-                hd: (wdata, $) => {
-                    if ($.teks) {
-                        if ($.perintah === 'cancel') {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
-                        }
-                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
-                        } else {
-                            if (--wdata.retries > 0) {
-                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
-                            } else {
-                                delete cache.data.waiter[$.uid];
-                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
-                            }
-                        }
+                }
+            } else {
+                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/susunkata') };
+            }
+        },
+    },
+    tebaklirik: {
+        stx: '/tebaklirik (Indonesia)',
+        cat: 'games',
+        fn: async ($) => {
+            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaklirik') };
+            cache.data.tebaklirik ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaklirik.json');
+            const soal = _.sample(cache.data.tebaklirik);
+            cache.data.waiter[$.uid] = {
+                _in: $.pengirim,
+                _handler: ['tebaklirik'],
+                jawaban: soal.jawaban.trim().toLowerCase(),
+                retries: 5,
+            };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
+        },
+        hd: (wdata, $) => {
+            if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
+                }
+                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
+                } else {
+                    if (--wdata.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    } else {
+                        delete cache.data.waiter[$.uid];
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
                     }
-                },
-            },
-            tebaktebakan: {
-                stx: '/game tebaktebakan',
-                cat: 'indonesian',
-                fn: async ($) => {
-                    if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaktebakan') };
-                    cache.data.tebaktebakan ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaktebakan.json');
-                    const soal = _.sample(cache.data.tebaktebakan);
-                    cache.data.waiter[$.uid] = {
-                        _in: $.pengirim,
-                        _handler: ['game', 'tebaktebakan'],
-                        jawaban: soal.jawaban.trim().toLowerCase(),
-                        retries: 5,
-                    };
-                    return { teks: $.TEKS('command/game/$question/start').replace('%q', soal.soal) };
-                },
-                hd: (wdata, $) => {
-                    if ($.teks) {
-                        if ($.perintah === 'cancel') {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/cancelled').replace('%ans', wdata.jawaban) };
-                        }
-                        if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                            delete cache.data.waiter[$.uid];
-                            return { teks: $.TEKS('command/game/$question/correct').replace('%ans', wdata.jawaban) };
-                        } else {
-                            if (--wdata.retries > 0) {
-                                return { teks: $.TEKS('command/game/$question/tryagain').replace('%lives', wdata.retries) };
-                            } else {
-                                delete cache.data.waiter[$.uid];
-                                return { teks: $.TEKS('command/game/$question/incorrect').replace('%ans', wdata.jawaban) };
-                            }
-                        }
+                }
+            } else {
+                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/tebaklirik') };
+            }
+        },
+    },
+    tebaktebakan: {
+        stx: '/tebaktebakan (Indonesia)',
+        cat: 'games',
+        fn: async ($) => {
+            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaktebakan') };
+            cache.data.tebaktebakan ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaktebakan.json');
+            const soal = _.sample(cache.data.tebaktebakan);
+            cache.data.waiter[$.uid] = {
+                _in: $.pengirim,
+                _handler: ['tebaktebakan'],
+                jawaban: soal.jawaban.trim().toLowerCase(),
+                retries: 5,
+            };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
+        },
+        hd: (wdata, $) => {
+            if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
+                }
+                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
+                    delete cache.data.waiter[$.uid];
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
+                } else {
+                    if (--wdata.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    } else {
+                        delete cache.data.waiter[$.uid];
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
                     }
-                },
-            },
+                }
+            } else {
+                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/tebaktebakan') };
+            }
         },
     },
     getid: {
@@ -790,8 +743,8 @@ const Perintah = {
         fn: ($) => Perintah.menu.fn($),
     },
     kbbi: {
-        stx: '/kbbi [word]',
-        cat: 'information',
+        stx: '/KBBI [q] (Indonesia)',
+        cat: 'searchengine',
         fn: async ($) => {
             if (!$.arg) return { teks: $.TEKS('command/kbbi') };
             try {
@@ -876,25 +829,8 @@ const Perintah = {
         stx: '/menu',
         cat: 'bot',
         fn: ($) => {
-            const map = {};
-            const cats = Object.fromEntries(
-                $.TEKS('command/menu/$categories')
-                    .split('\n')
-                    .map((v) => v.split('='))
-            );
-            for (const cmd in Perintah) {
-                const cat = cats[Perintah[cmd].cat];
-                if (!map[cat]) map[cat] = [];
-                map[cat].push((Perintah[cmd].lim ? '*' : '') + Perintah[cmd].stx);
-            }
             return {
-                teks: $.TEKS('command/menu').replace(
-                    '%',
-                    Object.entries(map)
-                        .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
-                        .join('\n\n')
-                ),
+                teks: $.TEKS('command/menu').replace('%', listPerintah($.TEKS('command/menu/$categories'), Perintah).teks),
             };
         },
     },
@@ -941,39 +877,19 @@ const Perintah = {
                 teks: $.arg,
             };
         },
-    },
+    }, //
     set: {
         stx: '/set >>',
         cat: 'bot',
         fn: async ($, data) => {
             if (!data.u) return { teks: $.TEKS('permission/registeredonly') };
 
-            function list() {
-                const map = {};
-                const cats = Object.fromEntries(
-                    $.TEKS('command/set/$categories')
-                        .split('\n')
-                        .map((v) => v.split('='))
-                );
-                for (const cmd in Perintah.set._) {
-                    const cat = cats[Perintah.set._[cmd].cat];
-                    if (!map[cat]) map[cat] = [];
-                    map[cat].push((Perintah.set._[cmd].lim ? '*' : '') + Perintah.set._[cmd].stx);
-                }
-                return {
-                    teks: Object.entries(map)
-                        .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
-                        .join('\n\n'),
-                };
-            }
-
-            if (!$.argumen) return list();
+            if (!$.argumen) return listPerintah($.TEKS('command/set/$categories'), Perintah.set._);
             const setting = $.args[0].toLowerCase();
             if (Perintah.set._.hasOwnProperty(setting)) {
                 $._argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp($.args[0])}\\s*`), '');
                 return await Perintah.set._[setting].fn($, data);
-            } else return list();
+            } else return listPerintah($.TEKS('command/set/$categories'), Perintah.set._);
         },
         _: {
             lang: {
@@ -1045,7 +961,7 @@ const Perintah = {
     sticker: {
         stx: '/sticker',
         cat: 'converter',
-        fn: async ($, data) => {
+        fn: async ($) => {
             if (!$.pengirim.startsWith('WA#')) return { teks: $.TEKS('command/sticker/onlywhatsapp') };
             if ($.gambar || $.q?.gambar) {
                 const gambar = $.gambar || $.q?.gambar;
@@ -1074,7 +990,7 @@ const Perintah = {
                 _webp = await webp.setExif(_webp, 'Miki Bot', 'multiplatform chatbot by RiozeC');
                 return { stiker: { file: _webp } };
             } else {
-                return { teks: $.TEKS('command/sticker/medianotsupported') };
+                return { teks: $.TEKS('command/sticker/nomedia') };
             }
         },
     },
@@ -1082,19 +998,23 @@ const Perintah = {
         stx: '/unsticker',
         cat: 'converter',
         fn: async ($) => {
-            const stiker = $.stiker || $.q?.stiker;
-            if (stiker.animasi) {
-                if ($.pengirim.startsWith('TG#')) return { teks: $.TEKS('command/unsticker/animatedstickertelegramnotsupported') };
-                const { file, _e } = await unduh($.pengirim, stiker);
-                if (_e) throw _e;
-                let output = await webp.keGif(file);
-                output = await gif.keMp4(output);
-                return { video: { file: output, gif: true } };
+            if ($.stiker || $.q?.stiker) {
+                const stiker = $.stiker || $.q?.stiker;
+                if (stiker.animasi) {
+                    if ($.platform === 'TG') return { teks: $.TEKS('command/unsticker/animatedstickertelegramnotsupported') };
+                    const { file, _e } = await unduh($.pengirim, stiker);
+                    if (_e) throw _e;
+                    let output = await webp.keGif(file);
+                    output = await gif.keMp4(output);
+                    return { video: { file: output, gif: true } };
+                } else {
+                    const { file, _e } = await unduh($.pengirim, stiker);
+                    if (_e) throw _e;
+                    const output = await webp.kePng(file);
+                    return { gambar: { file: output } };
+                }
             } else {
-                const { file, _e } = await unduh($.pengirim, stiker);
-                if (_e) throw _e;
-                const output = await webp.kePng(file);
-                return { gambar: { file: output } };
+                return { teks: $.TEKS('command/unsticker/nomedia') };
             }
         },
     },
@@ -1136,140 +1056,122 @@ const Perintah = {
         },
     },
     youtube: {
-        stx: '/youtube >>',
-        cat: 'downloader',
+        stx: '/youtube [q]',
+        cat: 'searchengine',
         fn: async ($, data) => {
-            function list() {
-                const map = {};
-                const cats = Object.fromEntries(
-                    $.TEKS('command/youtube/$categories')
-                        .split('\n')
-                        .map((v) => v.split('='))
-                );
-                for (const cmd in Perintah.youtube._) {
-                    const cat = cats[Perintah.youtube._[cmd].cat];
-                    if (!map[cat]) map[cat] = [];
-                    map[cat].push((Perintah.youtube._[cmd].lim ? '*' : '') + Perintah.youtube._[cmd].stx);
-                }
-                return {
-                    teks: Object.entries(map)
-                        .sort(() => _.random(-1, 1))
-                        .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
-                        .join('\n\n'),
-                };
-            }
-
-            if (!$.argumen) return list();
-            const yt = $.args[0].toLowerCase();
-            if (Perintah.youtube._.hasOwnProperty(yt)) {
-                $._argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp($.args[0])}\\s*`), '');
-                return await Perintah.youtube._[yt].fn($, data);
-            } else return list();
+            if (!$.argumen) return { teks: $.TEKS('command/youtube') };
+            const res = await (await lolHumanAPI('ytsearch', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result[0]?.thumbnail ? { url: res.result[0].thumbnail } : undefined,
+                teks: res.result.map((v) => `• ${v.title}\n${v.published} | ${v.views}\nhttps://youtube.com/watch?v=${v.videoId}`).join('\n\n'),
+            };
         },
-        _: {
-            search: {
-                stx: '/youtube search [q]',
-                cat: 'youtube',
-                lim: true,
-                fn: async ($, data) => {
-                    const limit = cekLimit($, data);
-                    if (limit.val === 0) return limit.habis;
-                    if (!$._argumen) return { teks: $.TEKS('command/youtube/search') };
-                    const res = await (await lolHumanAPI('ytsearch', 'query=' + encodeURI($._argumen))).json();
-                    if (res.status != 200) throw res.message;
-                    limit.kurangi();
-                    return {
-                        gambar: res.result[0]?.thumbnail ? { url: res.result[0].thumbnail } : undefined,
-                        teks: res.result.map((v) => `• ${v.title}\n${v.published} | ${v.views}\nhttps://youtube.com/watch?v=${v.videoId}`).join('\n\n'),
-                    };
-                },
-            },
-            audio: {
-                stx: '/youtube audio [link]',
-                cat: 'youtube',
-                lim: true,
-                fn: async ($, data) => {
-                    const limit = cekLimit($, data);
-                    if (limit.val === 0) return limit.habis;
-                    if (!$._argumen) return { teks: $.TEKS('command/youtube/audio') };
-                    if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($._argumen)) return { teks: $.TEKS('command/youtube/audio') };
-                    const res = await (await lolHumanAPI('ytaudio', 'url=' + encodeURI($._argumen))).json();
-                    if (res.status != 200) throw res.message;
-                    return await new Promise((resolve, reject) => {
-                        fetch(res.result.link.link)
-                            .then((_res) => {
-                                const filename = './tmp/' + utils.namaFileAcak() + '.mp3';
-                                const stream = fs.createWriteStream(filename);
-                                _res.body.pipe(stream);
-                                let size;
-                                _res.body.on('data', async (chunk) => {
-                                    size += chunk.length;
-                                    if (size > ukuranFileDokumenMaksimal($.pengirim))
-                                        resolve({
-                                            teks: $.TEKS('command/youtube/audio/toobig')
-                                                .replace('%alink', await getShortLink(res.result.link.link))
-                                                .replace('%asize', res.result.link.size)
-                                                .replace('%ares', res.result.link.bitrate + 'kb/s'),
-                                        });
+    },
+    ytaudio: {
+        stx: '/ytaudio [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/ytaudio') };
+            if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytaudio') };
+            const res = await (await lolHumanAPI('ytaudio', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return await new Promise((resolve, reject) => {
+                fetch(res.result.link.link)
+                    .then((_res) => {
+                        const filename = './tmp/' + utils.namaFileAcak() + '.mp3';
+                        const stream = fs.createWriteStream(filename);
+                        _res.body.pipe(stream);
+                        let size = 0,
+                            ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
+                            ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                        _res.body.on('data', async (chunk) => {
+                            size += chunk.length;
+                            if (size > ukuranDokumenMaksimal) {
+                                _res.body.close();
+                                resolve({
+                                    teks: $.TEKS('command/ytaudio/toobig')
+                                        .replace('%alink', await getShortLink(res.result.link.link))
+                                        .replace('%asize', res.result.link.size)
+                                        .replace('%ares', res.result.link.bitrate + 'kb/s'),
                                 });
-                                _res.body.on('end', () => {
-                                    if (size > ukuranFileDokumenMaksimal($.pengirim)) return;
-                                    limit.kurangi();
-                                    resolve({
-                                        dokumen: { file: filename, mimetype: 'audio/mp3', namaFile: res.result.title + '.mp3' },
-                                    });
+                            }
+                        });
+                        _res.body.on('end', () => {
+                            limit.kurangi();
+                            if (size < ukuranAudioMaksimal) {
+                                resolve({
+                                    audio: { file: filename },
+                                    teks: res.result.title,
                                 });
-                                stream.on('error', reject);
-                            })
-                            .catch(reject);
-                    });
-                },
-            },
-            video: {
-                stx: '/youtube video [link]',
-                cat: 'youtube',
-                lim: true,
-                fn: async ($, data) => {
-                    const limit = cekLimit($, data);
-                    if (limit.val === 0) return limit.habis;
-                    if (!$._argumen) return { teks: $.TEKS('command/youtube/video') };
-                    if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($._argumen)) return { teks: $.TEKS('command/youtube/video') };
-                    const res = await (await lolHumanAPI('ytvideo', 'url=' + encodeURI($._argumen))).json();
-                    if (res.status != 200) throw res.message;
-                    return await new Promise((resolve, reject) => {
-                        fetch(res.result.link.link)
-                            .then((_res) => {
-                                const filename = './tmp/' + utils.namaFileAcak() + '.mp4';
-                                const stream = fs.createWriteStream(filename);
-                                _res.body.pipe(stream);
-                                let size;
-                                _res.body.on('data', async (chunk) => {
-                                    size += chunk.length;
-                                    if (size > ukuranFileDokumenMaksimal($.pengirim))
-                                        resolve({
-                                            teks: $.TEKS('command/youtube/video/toobig')
-                                                .replace('%vlink', await getShortLink(res.result.link.link))
-                                                .replace('%vsize', res.result.link.size)
-                                                .replace('%vres', res.result.link.resolution),
-                                        });
+                            } else {
+                                resolve({
+                                    dokumen: { file: filename, mimetype: 'audio/mp3', namaFile: res.result.title + '.mp3' },
                                 });
-                                _res.body.on('end', () => {
-                                    if (size > ukuranFileDokumenMaksimal($.pengirim)) return;
-                                    limit.kurangi();
-                                    resolve({
-                                        dokumen: { file: filename, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
-                                    });
+                            }
+                        });
+                        stream.on('error', reject);
+                    })
+                    .catch(reject);
+            });
+        },
+    },
+    ytvideo: {
+        stx: '/ytvideo [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/ytvideo') };
+            if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytvideo') };
+            const res = await (await lolHumanAPI('ytvideo', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return await new Promise((resolve, reject) => {
+                fetch(res.result.link.link)
+                    .then((_res) => {
+                        const filename = './tmp/' + utils.namaFileAcak() + '.mp4';
+                        const stream = fs.createWriteStream(filename);
+                        _res.body.pipe(stream);
+                        let size = 0,
+                            ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                            ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                        _res.body.on('data', async (chunk) => {
+                            size += chunk.length;
+                            if (size > ukuranDokumenMaksimal) {
+                                _res.body.close();
+                                resolve({
+                                    teks: $.TEKS('command/ytvideo/toobig')
+                                        .replace('%vlink', await getShortLink(res.result.link.link))
+                                        .replace('%vsize', res.result.link.size)
+                                        .replace('%vres', res.result.link.resolution),
                                 });
-                                stream.on('error', reject);
-                            })
-                            .catch(reject);
-                    });
-                },
-            },
+                            }
+                        });
+                        _res.body.on('end', () => {
+                            limit.kurangi();
+                            if (size < ukuranVideoMaksimal) {
+                                resolve({
+                                    video: { file: filename },
+                                    teks: res.result.title,
+                                });
+                            } else {
+                                resolve({
+                                    dokumen: { file: filename, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
+                                });
+                            }
+                        });
+                        stream.on('error', reject);
+                    })
+                    .catch(reject);
+            });
         },
     },
     jadwaltv: {
-        stx: '/jadwaltv [channel] (indonesia)',
+        stx: '/jadwaltv [channel] (Indonesia)',
         cat: 'information',
         fn: async ($) => {
             if (!$.args[0]) return { teks: $.TEKS('command/jadwaltv') };
@@ -1286,7 +1188,7 @@ const Perintah = {
         },
     },
     acaratv: {
-        stx: '/acaratv (indonesia)',
+        stx: '/acaratv (Indonesia)',
         cat: 'information',
         lim: true,
         fn: async ($, data) => {
@@ -1302,37 +1204,46 @@ const Perintah = {
             };
         },
     },
-    facebook: {
-        stx: '/facebook [link]',
+    fbvideo: {
+        stx: '/fbvideo [link]',
         cat: 'downloader',
         lim: true,
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.|m\.|web\.|mbasic\.)?(facebook|fb)\.(com|watch)/.test($.argumen)) return { teks: $.TEKS('command/facebook') };
+            if (!/^(https?:\/\/)?(www\.|m\.|web\.|mbasic\.)?(facebook|fb)\.(com|watch)/.test($.argumen)) return { teks: $.TEKS('command/fbvideo') };
             const res = await (await lolHumanAPI('facebook', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
-            if (!res.result) return { teks: $.TEKS('command/facebook/cantdownload') };
+            if (!res.result) return { teks: $.TEKS('command/fbvideo/cantdownload') };
             return await new Promise((resolve, reject) => {
                 fetch(res.result)
                     .then((_res) => {
                         const filename = './tmp/' + utils.namaFileAcak() + '.mp4';
                         const stream = fs.createWriteStream(filename);
                         _res.body.pipe(stream);
-                        let size;
+                        let size = 0,
+                            ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                            ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
                         _res.body.on('data', async (chunk) => {
                             size += chunk.length;
-                            if (size > ukuranFileDokumenMaksimal($.pengirim))
+                            if (size > ukuranDokumenMaksimal) {
+                                _res.body.close();
                                 resolve({
-                                    teks: $.TEKS('command/facebook/toobig').replace('%vlink', await getShortLink(res.result)),
+                                    teks: $.TEKS('command/fbvideo/toobig').replace('%vlink', await getShortLink(res.result)),
                                 });
+                            }
                         });
                         _res.body.on('end', () => {
-                            if (size > ukuranFileDokumenMaksimal($.pengirim)) return;
                             limit.kurangi();
-                            resolve({
-                                dokumen: { file: filename, mimetype: 'video/mp4', namaFile: filename },
-                            });
+                            if (size < ukuranVideoMaksimal) {
+                                resolve({
+                                    video: { file: filename },
+                                });
+                            } else {
+                                resolve({
+                                    dokumen: { file: filename, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
+                                });
+                            }
                         });
                         stream.on('error', reject);
                     })
@@ -1344,10 +1255,36 @@ const Perintah = {
 
 //////////////////// FUNGSI PEMBANTU
 
-function ukuranFileDokumenMaksimal(pengirim) {
-    if (pengirim.startsWith('WA')) return 100_000_000;
-    if (pengirim.startsWith('TG')) return 2_000_000_000;
+function listPerintah(listKategori, perintahObj) {
+    const map = {};
+    const cats = Object.fromEntries(listKategori.split('\n').map((v) => v.split('=')));
+    for (const cmd in perintahObj) {
+        const cat = cats[perintahObj[cmd].cat];
+        if (!map[cat]) map[cat] = [];
+        map[cat].push((perintahObj[cmd].lim ? '$ ' : '') + perintahObj[cmd].stx);
+    }
+    return {
+        teks: Object.entries(map)
+            .sort(() => _.random(-2, 2))
+            .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
+            .join('\n\n'),
+    };
 }
+
+const ukuranMaksimal = {
+    dokumen: {
+        WA: 100_000_000,
+        TG: 2_000_000_000,
+    },
+    video: {
+        WA: 100_000_000,
+        TG: 50_000_000,
+    },
+    audio: {
+        WA: 16_000_000,
+        TG: 50_000_000,
+    },
+};
 
 async function getShortLink(link) {
     let res = await (await lolHumanAPI('shortlink', 'url=' + encodeURI(link))).json();
