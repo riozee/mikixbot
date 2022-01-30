@@ -1,6 +1,16 @@
 const fs = require('fs/promises');
 const path = require('path');
 
+function encodePesan(pesan) {
+    return `${pesan.d || '00'}${JSON.stringify(pesan)}${pesan.i ? 'i' : '0'}${pesan.k || '00'}`;
+}
+exports.encodePesan = encodePesan;
+
+function decodePesan(pesan) {
+    return JSON.parse(pesan.slice(2, -3));
+}
+exports.decodePesan = decodePesan;
+
 exports.IPC = class IPC {
     constructor(subprosesIni, objekProcessGlobal) {
         this.subproses = subprosesIni;
@@ -8,21 +18,24 @@ exports.IPC = class IPC {
     }
 
     kirimSinyal(keSubproses, pesan) {
-        return this.process.send({
-            _: pesan,
-            d: this.subproses,
-            k: keSubproses,
-        });
+        return this.process.send(
+            encodePesan({
+                _: pesan,
+                d: this.subproses,
+                k: keSubproses,
+            })
+        );
     }
 
     terimaSinyal(pesan, fnKendali) {
-        return fnKendali(pesan);
+        return fnKendali(decodePesan(pesan));
     }
 
     kirimKueri(keSubproses, pesan) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const id = Math.random().toString(36).slice(2);
             const responKueri = (hasil) => {
+                hasil = decodePesan(hasil);
                 if (hasil.hasOwnProperty('ir') && hasil.ir === id) {
                     resolve(hasil._);
                     this.process.removeListener('message', responKueri);
@@ -30,12 +43,12 @@ exports.IPC = class IPC {
             };
             this.process.on('message', responKueri);
             this.process.send(
-                {
+                encodePesan({
                     i: id,
                     _: pesan,
                     d: this.subproses,
                     k: keSubproses,
-                },
+                }),
                 (eror) => {
                     if (eror) {
                         resolve({ _e: eror.stack ?? eror });
@@ -47,6 +60,7 @@ exports.IPC = class IPC {
     }
 
     async terimaDanBalasKueri(pesan, fnKendali) {
+        pesan = decodePesan(pesan);
         let hasil, eror;
         try {
             hasil = await fnKendali(pesan);
@@ -54,11 +68,13 @@ exports.IPC = class IPC {
             console.error($eror);
             eror = $eror.stack ?? $eror;
         } finally {
-            this.process.send({
-                ir: pesan.i,
-                _: hasil ? { ...hasil } : eror ? { _e: eror } : {},
-                k: pesan.d,
-            });
+            this.process.send(
+                encodePesan({
+                    ir: pesan.i,
+                    _: hasil ? { ...hasil } : eror ? { _e: eror } : {},
+                    k: pesan.d,
+                })
+            );
         }
     }
 };

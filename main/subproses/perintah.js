@@ -59,13 +59,64 @@ async function proses(pesan) {
         waiter($, data);
     }
     ////////// PERINTAH
-    else if ($.teks) {
-        if (/^[\/\-\\><+_=|~!?@#$%^&\:.][a-zA-Z0-9]+\s*/.test($.teks)) {
-            perintah(pesan, data);
-        } else {
-            log(3, $.teks);
+    else if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&\:.][a-zA-Z0-9]+\s*/.test($.teks)) {
+        perintah(pesan, data);
+    }
+
+    ////////// SIMSIMI
+    else if (cache.data.simsimi[$.pengirim]) {
+        simsimi($, data);
+    }
+}
+
+async function simsimi($, data) {
+    if (cache.data.simsimi[$.pengirim].expiration < Date.now()) {
+        delete cache.data.simsimi[$.pengirim];
+        return;
+    }
+    if ($.teks && Math.random() > 0.25) {
+        try {
+            if ($.teks.length > 1096) {
+                return kirimPesan($.pengirim, {
+                    teks: $.TEKS('command/simsimi/texttoolong'),
+                    re: true,
+                    mid: $.mid,
+                });
+            }
+            const res = await (await lolHumanAPI('simi', 'text=' + encodeURI($.teks))).json();
+            if (res.status != 200 || !res.result) throw JSON.stringify(res);
+            const { s, _e } = await new Promise((resolve) => {
+                setTimeout(() => {
+                    _kirimPesan($.pengirim, {
+                        teks: res.result,
+                        re: true,
+                        mid: $.mid,
+                    }).then((v) => resolve(v));
+                }, _.random(0, 5000));
+            });
+            if (s === false) throw _e;
+        } catch (e) {
+            const errId = Math.random().toString(36).slice(2).toUpperCase();
+            cache.data.errors ||= {};
+            cache.data.errors[errId] = {
+                $: $,
+                e: e?.stack ?? e,
+                t: Date.now(),
+            };
+            kirimPesan($.pengirim, {
+                teks: $.TEKS('command/simsimi/error').replace('%err', errId),
+                re: true,
+                mid: $.mid,
+            });
         }
     }
+    // else {
+    //     kirimPesan($.pengirim, {
+    //         teks: $.TEKS('command/simsimi/notext'),
+    //         re: true,
+    //         mid: $.mid,
+    //     });
+    // }
 }
 
 async function waiter($, data) {
@@ -311,8 +362,7 @@ async function validasiUser($, data) {
     if (!cache.data.cdcmd) cache.data.cdcmd = {};
     const cdcmd = cache.data.cdcmd;
     if (!cdcmd[$.uid]) cdcmd[$.uid] = 0;
-    console.log('====================', $, data);
-    if (!data.u || data.u.premlvl === 0 || Date.now() > +data.u.expiration) {
+    if (!data.u || data.u.premlvl === 0 || Date.now() > data.u.expiration) {
         // FREE USER
         if (Date.now() - cdcmd[$.uid] < 5000) r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5') };
     } else {
@@ -333,7 +383,7 @@ function cekLimit($, data) {
     const usrlimit = cache.data.usrlimit;
     if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
     return {
-        val: data.u?.premlvl !== 0 ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 3),
+        val: cekPremium($, data) ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 1),
         kurangi: () => {
             if (data.u?.premlvl === 0 && usrlimit[$.uid] > 0) {
                 usrlimit[$.uid] -= 1;
@@ -366,6 +416,15 @@ function cekWaiter($) {
     };
 }
 
+function cekPremium($, data) {
+    if (data.u?.premlvl) {
+        console.log(true);
+        if (data.u.expiration > Date.now()) return true;
+        return false;
+    }
+    return false;
+}
+
 //////////////////// PERINTAH-PERINTAH
 
 async function perintah(pesan, data) {
@@ -385,7 +444,7 @@ async function perintah(pesan, data) {
     if (Perintah.hasOwnProperty($.perintah)) {
         let r;
         if ($.pengirim.endsWith('#C') && (r = await validasiGrup($, data))) return kirimPesan($.pengirim, r);
-        if ((r = await validasiUser($, $.uid, data))) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
+        if ((r = await validasiUser($, data))) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
 
         const msg = {
             penerima: $.pengirim,
@@ -431,6 +490,9 @@ async function perintah(pesan, data) {
         }
     } else {
         log(4, $.perintah);
+        if (cache.data.simsimi[$.pengirim]) {
+            simsimi($, data);
+        }
     }
 }
 
@@ -465,10 +527,16 @@ const Perintah = {
             if (cdata) e = await DB.perbarui({ _id: id }, { $set: { expiration: perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi } });
             else e = await DB.buat({ _id: id, join: Date.now(), expiration: Date.now() + +durasi });
             if (e._e) throw e._e;
+            kirimPesan(id, {
+                teks: $.TEKS('command/setgroupsubscription/notify').replace(
+                    '%date',
+                    new Date(perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi).toLocaleString()
+                ),
+            });
             return {
                 teks: $.TEKS('command/setgroupsubscription/done')
                     .replace('%id', id)
-                    .replace('%date', new Date(perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi)),
+                    .replace('%date', new Date(perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi).toLocaleString()),
             };
         },
     },
@@ -2228,12 +2296,16 @@ const Perintah = {
             const link = res.result.link;
             const f = await fetch(link);
             const maxSize = ukuranMaksimal.dokumen[$.platform];
-            if (+f.headers.get('content-length') > maxSize) return { teks: $.TEKS('command/mediafiredl/toobig').replace('%link', await getShortLink(link)) };
-            const { file } = await saveFetchByStream(f, mimetypes.extension(f.headers.get('content-type')), maxSize);
-            return {
-                dokumen: { file: file, mimetype: f.headers.get('content-type'), namaFile: res.result.filename },
-                _limit: limit,
-            };
+            try {
+                const { file } = await saveFetchByStream(f, mimetypes.extension(f.headers.get('content-type')), maxSize);
+                return {
+                    dokumen: { file: file, mimetype: f.headers.get('content-type'), namaFile: res.result.filename },
+                    _limit: limit,
+                };
+            } catch (e) {
+                if (e === 'toobig') return { teks: $.TEKS('command/mediafiredl/toobig').replace('%link', await getShortLink(link)) };
+                throw e;
+            }
         },
     },
     zippysharedl: {
@@ -2249,12 +2321,16 @@ const Perintah = {
             const link = res.result.download_url;
             const f = await fetch(link);
             const maxSize = ukuranMaksimal.dokumen[$.platform];
-            if (+f.headers.get('content-length') > maxSize) return { teks: $.TEKS('command/zippysharedl/toobig').replace('%link', await getShortLink(link)) };
-            const { file } = await saveFetchByStream(f, mimetypes.extension(f.headers.get('content-type')), maxSize);
-            return {
-                dokumen: { file: file, mimetype: f.headers.get('content-type'), namaFile: res.result.filename },
-                _limit: limit,
-            };
+            try {
+                const { file } = await saveFetchByStream(f, mimetypes.extension(f.headers.get('content-type')), maxSize);
+                return {
+                    dokumen: { file: file, mimetype: f.headers.get('content-type'), namaFile: res.result.filename },
+                    _limit: limit,
+                };
+            } catch (e) {
+                if (e === 'toobig') return { teks: $.TEKS('command/zippysharedl/toobig').replace('%link', await getShortLink(link)) };
+                throw e;
+            }
         },
     },
     pinterestimage: {
@@ -2291,7 +2367,6 @@ const Perintah = {
             const f = await fetch(link);
             const maxDocSize = ukuranMaksimal.dokumen[$.platform];
             const maxVidSize = ukuranMaksimal.video[$.platform];
-            if (+f.headers.get('content-length') > maxDocSize) return { teks: $.TEKS('command/pinterestvideo/toobig').replace('%link', link) };
             try {
                 const { file, size } = await saveFetchByStream(f, 'mp4', maxDocSize);
                 if (size < maxVidSize) {
@@ -2423,6 +2498,46 @@ const Perintah = {
                 video: { file: file },
                 _limit: limit,
             };
+        },
+    },
+    simsimi: {
+        stx: '/simsimi (Indonesia)',
+        cat: 'fun',
+        lim: true,
+        fn: ($, data) => {
+            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
+            cache.data.simsimi ||= {};
+            if (cache.data.simsimi[$.pengirim]) {
+                delete cache.data.simsimi[$.pengirim];
+                return { teks: $.TEKS('command/simsimi/off') };
+            } else {
+                cache.data.simsimi[$.pengirim] = {
+                    initiator: $.uid,
+                    expiration: data.u.expiration,
+                };
+                return { teks: $.TEKS('command/simsimi/on') };
+            }
+        },
+    },
+    berita: {
+        stx: '/berita (Indonesia)',
+        cat: 'information',
+        fn: async () => {
+            const res = await (await lolHumanAPI('newsinfo')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result[0]?.urlToImage ? { url: res.result[0].urlToImage } : undefined,
+                teks: res.result
+                    .map((v) => `• ${v.title}\n${v.url}\n${new Date(v.publishedAt).toLocaleString()}${v.description ? ' - ' + v.description : ''}`)
+                    .join('\n\n'),
+            };
+        },
+    },
+    '1cak': {
+        stx: '/1cak (Indonesia)',
+        cat: 'fun',
+        fn: async ($, data) => {
+            return await Perintah.bts.fn($, data, { endpoint: 'onecak' });
         },
     },
 };
@@ -2611,11 +2726,13 @@ function logPesan(d, pesan, bot) {
 ////////////////////
 
 process.on('message', async (pesan) => {
-    if (pesan.hasOwnProperty('_')) {
-        if (pesan._.hasOwnProperty('pengirim')) {
-            return await IPC.terimaSinyal(pesan, proses);
+    IPC.terimaSinyal(pesan, (pesan) => {
+        if (pesan.hasOwnProperty('_')) {
+            if (pesan._.hasOwnProperty('pengirim')) {
+                proses(pesan);
+            }
         }
-    }
+    });
 });
 
 process.on('exit', () => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.data)));

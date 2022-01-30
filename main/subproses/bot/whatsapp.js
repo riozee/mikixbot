@@ -391,38 +391,43 @@ async function unduhMedia(media) {
     return keluaran;
 }
 
-process.on('message', (pesan) => {
-    if (pesan.hasOwnProperty('_')) {
-        if (pesan.hasOwnProperty('i')) {
-            if (pesan._.hasOwnProperty('penerima')) {
-                IPC.terimaDanBalasKueri(pesan, (pesan) => kirimPesan(pesan));
-            } else if (pesan._.hasOwnProperty('_eval')) {
-                IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
-            } else if (pesan._.hasOwnProperty('unduh')) {
-                IPC.terimaDanBalasKueri(pesan, async (pesan) => ({ file: await unduhMedia(pesan._.unduh) }));
-            } else if (pesan._.hasOwnProperty('isAdmin')) {
-                IPC.terimaDanBalasKueri(pesan, async (pesan) => ({
-                    admin: Boolean((await bot.groupMetadata(ID(pesan._.isAdmin.c))).participants.filter((v) => v.id === ID(pesan._.isAdmin.u))[0]?.admin),
-                }));
-            }
-        } else if (pesan._.hasOwnProperty('penerima')) {
-            IPC.terimaSinyal(pesan, (pesan) => kirimPesan(pesan));
-        }
+function anch(pesan) {
+    if (pesan._.anch.roomID) {
+        const roomID = pesan._.anch.roomID,
+            msgID = pesan._.anch.msgID;
+        if (!cache.anch) cache.anch = {};
+        const msg = cache.msg.filter((_pesan) => _pesan.key.id == msgID)[0];
+        if (!cache.anch[roomID]) cache.anch[roomID] = {};
+        cache.anch[roomID][msgID] = msg;
+    } else if (pesan._.anch.delRoomID) {
+        const roomID = pesan._.anch.delRoomID;
+        if (cache.anch) delete cache.anch[roomID];
+    }
+}
 
-        //////////////////// ANONYMOUS CHAT CACHE PESAN
-        else if (pesan._.hasOwnProperty('anch')) {
-            if (pesan._.anch.hasOwnProperty('roomID')) {
-                const roomID = pesan._.anch.roomID,
-                    msgID = pesan._.anch.msgID;
-                if (!cache.anch) cache.anch = {};
-                const msg = cache.msg.filter((_pesan) => _pesan.key.id == msgID)[0];
-                if (!cache.anch[roomID]) cache.anch[roomID] = {};
-                cache.anch[roomID][msgID] = msg;
-            } else if (pesan._.anch.hasOwnProperty('delRoomID')) {
-                const roomID = pesan._.anch.delRoomID;
-                if (cache.anch) delete cache.anch[roomID];
+process.on('message', (pesan) => {
+    if (pesan.slice(-2).endsWith('i')) {
+        IPC.terimaDanBalasKueri(pesan, async (pesan) => {
+            if (pesan._?.penerima) {
+                return await kirimPesan(pesan);
+            } else if (pesan._?._eval) {
+                return await utils.jalankanFn(() => eval(pesan._._eval));
+            } else if (pesan._?.unduh) {
+                return { file: await unduhMedia(pesan._.unduh) };
+            } else if (pesan._?.isAdmin) {
+                return {
+                    admin: Boolean((await bot.groupMetadata(ID(pesan._.isAdmin.c))).participants.filter((v) => v.id === ID(pesan._.isAdmin.u))[0]?.admin),
+                };
             }
-        }
+        });
+    } else {
+        IPC.terimaSinyal(pesan, async (pesan) => {
+            if (pesan._?.penerima) {
+                return await kirimPesan(pesan);
+            } else if (pesan._?.anch) {
+                return anch(pesan);
+            }
+        });
     }
 });
 

@@ -1,4 +1,4 @@
-const { jalankanFn } = require('./utils');
+const { jalankanFn, encodePesan, decodePesan } = require('./utils');
 const fork = require('child_process').fork;
 const minimist = require('minimist');
 const fs = require('fs');
@@ -41,26 +41,28 @@ function mulaiProses(file) {
 }
 
 async function main(pesan) {
-    if (pesan.hasOwnProperty('k')) {
-        if (pesan.k === 'PR') {
-            teruskanKe('./main/subproses/perintah.js', pesan);
-        } else if (pesan.k === 'DB') {
-            teruskanKe('./main/subproses/database.js', pesan);
-        } else if (pesan.k === 'TG') {
-            teruskanKe('./main/subproses/bot/telegram.js', pesan);
-        } else if (pesan.k === 'WA') {
-            teruskanKe('./main/subproses/bot/whatsapp.js', pesan);
-        }
+    if (pesan.endsWith('PR')) {
+        teruskanKe('./main/subproses/perintah.js', pesan);
+    } else if (pesan.endsWith('DB')) {
+        teruskanKe('./main/subproses/database.js', pesan);
+    } else if (pesan.endsWith('TG')) {
+        teruskanKe('./main/subproses/bot/telegram.js', pesan);
+    } else if (pesan.endsWith('WA')) {
+        teruskanKe('./main/subproses/bot/whatsapp.js', pesan);
+    }
 
-        //////////////////////////////
-        else if (pesan.k === 'MAIN') {
-            if (pesan.hasOwnProperty('d') && pesan.d === 'PR') {
-                if (pesan.hasOwnProperty('_') && pesan._.hasOwnProperty('_eval')) {
-                    teruskanKe('./main/subproses/perintah.js', {
+    //////////////////////////////
+    else if (pesan.endsWith('ZZ')) {
+        pesan = decodePesan(pesan);
+        if (pesan.hasOwnProperty('d') && pesan.d === 'PR') {
+            if (pesan.hasOwnProperty('_') && pesan._.hasOwnProperty('_eval')) {
+                teruskanKe(
+                    './main/subproses/perintah.js',
+                    encodePesan({
                         ir: pesan.i,
                         _: await jalankanFn(() => eval(pesan._._eval)),
-                    });
-                }
+                    })
+                );
             }
         }
     }

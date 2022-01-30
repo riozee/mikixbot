@@ -100,15 +100,17 @@ async function proses(pesan) {
 process.on('exit', klien.close);
 
 process.on('message', (pesan) => {
-    if (pesan.hasOwnProperty('i')) {
-        if (pesan.hasOwnProperty('_')) {
-            if (pesan._.hasOwnProperty('_eval')) {
-                IPC.terimaDanBalasKueri(pesan, (pesan) => utils.jalankanFn(() => eval(pesan._._eval)));
-            } else {
-                IPC.terimaDanBalasKueri(pesan, (pesan) => proses(pesan));
+    IPC.terimaDanBalasKueri(pesan, async (pesan) => {
+        if (pesan.hasOwnProperty('i')) {
+            if (pesan.hasOwnProperty('_')) {
+                if (pesan._.hasOwnProperty('_eval')) {
+                    return await utils.jalankanFn(() => eval(pesan._._eval));
+                } else {
+                    return await proses(pesan);
+                }
             }
         }
-    }
+    });
 });
 
 function log(kode, ...argumen2) {
