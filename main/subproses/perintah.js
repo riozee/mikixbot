@@ -8,6 +8,8 @@ const util = require('util');
 const _ = require('lodash');
 const fetch = require('node-fetch');
 const chalk = require('chalk');
+const FormData = require('form-data');
+const mimetypes = require('mime-types');
 const gif = require('../alat/gif_konversi');
 const webp = require('../alat/webp_konversi');
 
@@ -54,32 +56,65 @@ async function proses(pesan) {
     }
     ////////// INPUT
     else if (cache.data.waiter && cache.data.waiter[$.uid] && cache.data.waiter[$.uid]._in === $.pengirim) {
-        try {
-            const cdw = cache.data.waiter[$.uid];
-            const handler = cdw._handler;
-            let r;
-            if ((r = Perintah[handler[0]]?.hd || Perintah[handler[0]]?._?.[handler[1]]?.hd)) {
-                if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&.][a-zA-Z0-9]+\s*/.test($.teks)) {
-                    const _perintah = $.teks.split(/\s+/)[0];
-                    $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
-                    $.perintah = _perintah.slice(1).toLowerCase();
-                    $.arg = $.argumen || $.q?.teks || '';
-                    $.args = $.argumen.split(/\s+/);
-                }
-                r = await r(cdw, $, data);
-                if (r) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
-            }
-        } catch (e) {
-            console.log(e);
-            return kirimPesan($.pengirim, { teks: $.TEKS('system/error').replace('%e', e), re: true, mid: $.mid });
-        }
+        waiter($, data);
     }
     ////////// PERINTAH
     else if ($.teks) {
-        if (/^[\/\-\\><+_=|~!?@#$%^&.][a-zA-Z0-9]+\s*/.test($.teks)) {
-            return perintah(pesan, data);
+        if (/^[\/\-\\><+_=|~!?@#$%^&\:.][a-zA-Z0-9]+\s*/.test($.teks)) {
+            perintah(pesan, data);
         } else {
             log(3, $.teks);
+        }
+    }
+}
+
+async function waiter($, data) {
+    try {
+        const waiter = cekWaiter($);
+        const handler = waiter.val._handler;
+        let r,
+            i = 0;
+        do {
+            if (!r) r = Perintah[handler[i++]];
+            else r = r._[handler[i++]];
+        } while (!r.hd);
+        if (r.hd) {
+            if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&\:.][a-zA-Z0-9]+\s*/.test($.teks)) {
+                const _perintah = $.teks.split(/\s+/)[0];
+                $.argumen = $.teks.replace(new RegExp(`^${_.escapeRegExp(_perintah)}\\s*`), '');
+                $.perintah = _perintah.slice(1).toLowerCase();
+                $.arg = $.argumen || $.q?.teks || '';
+                $.args = $.argumen.split(/\s+/);
+            }
+            r = await r.hd(waiter, $, data);
+            if (!r) return;
+            let lim;
+            if (r._limit) {
+                lim = r._limit;
+                delete r._limit;
+            }
+            const { s, _e } = await _kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
+            if (s === false) throw _e;
+            if (lim) lim.kurangi();
+        }
+    } catch (e) {
+        log(6, $.teks);
+        console.error(e);
+        const errId = Math.random().toString(36).slice(2).toUpperCase();
+        cache.data.errors ||= {};
+        cache.data.errors[errId] = {
+            $: $,
+            e: e?.stack ?? e,
+            t: Date.now(),
+        };
+        const hasil = {
+            re: true,
+            mid: $.mid,
+            teks: $.TEKS('system/error').replace('%e', errId),
+        };
+        kirimPesan($.pengirim, hasil);
+        for (const id in cache.data.errors) {
+            if (Date.now() - cache.data.errors[id].t > 86_400_000) delete cache.data.errors[id];
         }
     }
 }
@@ -276,6 +311,7 @@ async function validasiUser($, data) {
     if (!cache.data.cdcmd) cache.data.cdcmd = {};
     const cdcmd = cache.data.cdcmd;
     if (!cdcmd[$.uid]) cdcmd[$.uid] = 0;
+    console.log('====================', $, data);
     if (!data.u || data.u.premlvl === 0 || Date.now() > +data.u.expiration) {
         // FREE USER
         if (Date.now() - cdcmd[$.uid] < 5000) r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5') };
@@ -297,7 +333,7 @@ function cekLimit($, data) {
     const usrlimit = cache.data.usrlimit;
     if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
     return {
-        val: data.u?.premlvl !== 0 ? 999 : usrlimit[$.uid] ?? (usrlimit[$.uid] = 3),
+        val: data.u?.premlvl !== 0 ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 3),
         kurangi: () => {
             if (data.u?.premlvl === 0 && usrlimit[$.uid] > 0) {
                 usrlimit[$.uid] -= 1;
@@ -305,6 +341,28 @@ function cekLimit($, data) {
             }
         },
         habis: { teks: $.TEKS('user/limitreached') },
+    };
+}
+
+function cekWaiter($) {
+    cache.data.waiter ||= {};
+    return {
+        val: cache.data.waiter[$.uid],
+        tolak: () => ({
+            teks: cache.data.waiter[$.uid]
+                ? $.TEKS('user/inanothersession').replace('%session', cache.data.waiter[$.uid]._sessionName || cache.data.waiter[$.uid]._handler.join('-'))
+                : '',
+        }),
+        tambahkan: (_in, _handler, data) =>
+            (cache.data.waiter[$.uid] = {
+                _in: _in,
+                _handler: _handler,
+                ...data,
+            }),
+        hapus: () => delete cache.data.waiter[$.uid],
+        notice: (cmd, d) => ({
+            teks: $.TEKS('user/dialognotice').replace('%cmd', cmd).replace('%d', d),
+        }),
     };
 }
 
@@ -337,18 +395,24 @@ async function perintah(pesan, data) {
         try {
             const res = await Perintah[$.perintah].fn($, data);
             if (!res) return;
+            let lim;
+            if (res._limit) {
+                lim = res._limit;
+                delete res._limit;
+            }
             const hasil = {
                 ...msg,
                 ...res,
             };
             log(5, hasil);
             logPesan(pesan.d, hasil, true);
-            let { _e } = await _kirimPesan($.pengirim, hasil);
-            if (_e) throw _e;
+            let { s, _e } = await _kirimPesan($.pengirim, hasil);
+            if (s === false) throw _e || s;
+            if (lim) lim.kurangi();
         } catch (e) {
             log(6, $.teks);
             console.error(e);
-            const errId = Math.random().toString(36).slice(2);
+            const errId = Math.random().toString(36).slice(2).toUpperCase();
             cache.data.errors ||= {};
             cache.data.errors[errId] = {
                 $: $,
@@ -455,7 +519,10 @@ const Perintah = {
     audioonly: {
         stx: '/audioonly',
         cat: 'converter',
-        fn: async ($) => {
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
             let media;
             if ($.video || $.q?.video) {
                 media = $.video || $.q?.video;
@@ -474,7 +541,7 @@ const Perintah = {
                     resolve(out);
                 });
             });
-            return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') } };
+            return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') }, _limit: limit };
         },
     },
     eval: {
@@ -506,37 +573,38 @@ const Perintah = {
     asahotak: {
         stx: '/asahotak (Indonesia)',
         cat: 'games',
-        fn: async ($) => {
-            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game asahotak') };
-            cache.data.asahotak ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/asahotak.json');
+        fn: async ($, data, { gamename, gamelink } = {}) => {
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            cache.data[gamename || 'asahotak'] ||= await fetchJSON(gamelink || 'https://raw.githubusercontent.com/Veanyxz/json/main/game/asahotak.json');
             const soal = _.sample(cache.data.asahotak);
-            cache.data.waiter[$.uid] = {
-                _in: $.pengirim,
-                _handler: ['asahotak'],
+            waiter.tambahkan($.pengirim, ['asahotak'], {
                 jawaban: soal.jawaban.trim().toLowerCase(),
                 retries: 5,
-            };
+                gamename: gamename,
+                _sessionName: gamename,
+            });
             return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
         },
-        hd: (wdata, $) => {
+        hd: (waiter, $) => {
             if ($.teks) {
                 if ($.perintah === 'cancel') {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
+                    waiter.hapus();
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban) };
                 }
-                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
+                if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
+                    waiter.hapus();
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban) };
                 } else {
-                    if (--wdata.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    if (--waiter.val.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) };
                     } else {
-                        delete cache.data.waiter[$.uid];
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
+                        waiter.hapus();
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban) };
                     }
                 }
             } else {
-                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/asahotak') };
+                return waiter.notice('/cancel', waiter.val.gamename || 'asahotak');
             }
         },
     },
@@ -544,37 +612,36 @@ const Perintah = {
         stx: '/caklontong (Indonesia)',
         cat: 'games',
         fn: async ($) => {
-            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game caklontong') };
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
             cache.data.caklontong ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/caklontong.json');
             const soal = _.sample(cache.data.caklontong);
-            cache.data.waiter[$.uid] = {
-                _in: $.pengirim,
-                _handler: ['caklontong'],
+            waiter.tambahkan($.pengirim, ['caklontong'], {
                 jawaban: soal.jawaban.trim().toLowerCase(),
                 deskripsi: soal.deskripsi,
                 retries: 5,
-            };
+            });
             return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
         },
-        hd: (wdata, $) => {
+        hd: (waiter, $) => {
             if ($.teks) {
                 if ($.perintah === 'cancel') {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                    waiter.hapus();
+                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) };
                 }
-                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
+                    waiter.hapus();
+                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) };
                 } else {
-                    if (--wdata.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
+                    if (--waiter.val.retries > 0) {
+                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) };
                     } else {
-                        delete cache.data.waiter[$.uid];
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', `${wdata.jawaban}\n${wdata.deskripsi}`) };
+                        waiter.hapus();
+                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) };
                     }
                 }
             } else {
-                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/caklontong') };
+                return waiter.notice('/cancel', 'caklontong');
             }
         },
     },
@@ -582,148 +649,42 @@ const Perintah = {
         stx: '/siapakahaku (Indonesia)',
         cat: 'games',
         fn: async ($) => {
-            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game siapakahaku') };
-            cache.data.siapakahaku ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/siapakahaku.json');
-            const soal = _.sample(cache.data.siapakahaku);
-            cache.data.waiter[$.uid] = {
-                _in: $.pengirim,
-                _handler: ['siapakahaku'],
-                jawaban: soal.jawaban.trim().toLowerCase(),
-                retries: 5,
-            };
-            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
-        },
-        hd: (wdata, $) => {
-            if ($.teks) {
-                if ($.perintah === 'cancel') {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
-                }
-                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
-                } else {
-                    if (--wdata.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
-                    } else {
-                        delete cache.data.waiter[$.uid];
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
-                    }
-                }
-            } else {
-                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/siapakahaku') };
-            }
+            return await Perintah.asahotak.fn($, {}, { gamename: 'siapakahaku', gamelink: 'https://raw.githubusercontent.com/Veanyxz/json/main/game/siapakahaku.json' });
         },
     },
     susunkata: {
         stx: '/susunkata (Indonesia)',
         cat: 'games',
         fn: async ($) => {
-            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game susunkata') };
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
             cache.data.susunkata ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/susunkata.sjon');
             const soal = _.sample(cache.data.susunkata);
-            cache.data.waiter[$.uid] = {
-                _in: $.pengirim,
-                _handler: ['susunkata'],
+            waiter.tambahkan($.pengirim, ['asahotak'], {
                 jawaban: soal.jawaban.trim().toLowerCase(),
                 retries: 5,
-            };
+                gamename: 'susunkata',
+                _sessionName: 'susunkata',
+            });
             return { teks: $.TEKS('command/$gamequestion/start').replace('%q', `${soal.soal} (${soal.tipe})`) };
-        },
-        hd: (wdata, $) => {
-            if ($.teks) {
-                if ($.perintah === 'cancel') {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
-                }
-                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
-                } else {
-                    if (--wdata.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
-                    } else {
-                        delete cache.data.waiter[$.uid];
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
-                    }
-                }
-            } else {
-                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/susunkata') };
-            }
         },
     },
     tebaklirik: {
         stx: '/tebaklirik (Indonesia)',
         cat: 'games',
         fn: async ($) => {
-            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaklirik') };
-            cache.data.tebaklirik ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaklirik.json');
-            const soal = _.sample(cache.data.tebaklirik);
-            cache.data.waiter[$.uid] = {
-                _in: $.pengirim,
-                _handler: ['tebaklirik'],
-                jawaban: soal.jawaban.trim().toLowerCase(),
-                retries: 5,
-            };
-            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
-        },
-        hd: (wdata, $) => {
-            if ($.teks) {
-                if ($.perintah === 'cancel') {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
-                }
-                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
-                } else {
-                    if (--wdata.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
-                    } else {
-                        delete cache.data.waiter[$.uid];
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
-                    }
-                }
-            } else {
-                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/tebaklirik') };
-            }
+            return await Perintah.asahotak.fn($, {}, { gamename: 'tebaklirik', gamelink: 'https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaklirik.json' });
         },
     },
     tebaktebakan: {
         stx: '/tebaktebakan (Indonesia)',
         cat: 'games',
         fn: async ($) => {
-            if ((cache.data.waiter ||= {})[$.uid]) return { teks: $.TEKS('user/inanothersession').replace('%session', '/game tebaktebakan') };
-            cache.data.tebaktebakan ||= await fetchJSON('https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaktebakan.json');
-            const soal = _.sample(cache.data.tebaktebakan);
-            cache.data.waiter[$.uid] = {
-                _in: $.pengirim,
-                _handler: ['tebaktebakan'],
-                jawaban: soal.jawaban.trim().toLowerCase(),
-                retries: 5,
-            };
-            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
-        },
-        hd: (wdata, $) => {
-            if ($.teks) {
-                if ($.perintah === 'cancel') {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', wdata.jawaban) };
-                }
-                if (new RegExp(wdata.jawaban).test($.teks.trim().toLowerCase())) {
-                    delete cache.data.waiter[$.uid];
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', wdata.jawaban) };
-                } else {
-                    if (--wdata.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', wdata.retries) };
-                    } else {
-                        delete cache.data.waiter[$.uid];
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', wdata.jawaban) };
-                    }
-                }
-            } else {
-                return { teks: $.TEKS('user/dialognotice').replace('%cmd', '/cancel').replace('%d', '/tebaktebakan') };
-            }
+            return await Perintah.asahotak.fn(
+                $,
+                {},
+                { gamename: 'tebaktebakan', gamelink: 'https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaktebakan.json' }
+            );
         },
     },
     getid: {
@@ -1077,46 +1038,33 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             if (!$.argumen) return { teks: $.TEKS('command/ytaudio') };
             if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytaudio') };
+            $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const res = await (await lolHumanAPI('ytaudio', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
-            return await new Promise((resolve, reject) => {
-                fetch(res.result.link.link)
-                    .then((_res) => {
-                        const filename = './tmp/' + utils.namaFileAcak() + '.mp3';
-                        const stream = fs.createWriteStream(filename);
-                        _res.body.pipe(stream);
-                        let size = 0,
-                            ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
-                            ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
-                        _res.body.on('data', async (chunk) => {
-                            size += chunk.length;
-                            if (size > ukuranDokumenMaksimal) {
-                                _res.body.close();
-                                resolve({
-                                    teks: $.TEKS('command/ytaudio/toobig')
-                                        .replace('%alink', await getShortLink(res.result.link.link))
-                                        .replace('%asize', res.result.link.size)
-                                        .replace('%ares', res.result.link.bitrate + 'kb/s'),
-                                });
-                            }
-                        });
-                        _res.body.on('end', () => {
-                            limit.kurangi();
-                            if (size < ukuranAudioMaksimal) {
-                                resolve({
-                                    audio: { file: filename },
-                                    teks: res.result.title,
-                                });
-                            } else {
-                                resolve({
-                                    dokumen: { file: filename, mimetype: 'audio/mp3', namaFile: res.result.title + '.mp3' },
-                                });
-                            }
-                        });
-                        stream.on('error', reject);
-                    })
-                    .catch(reject);
-            });
+            try {
+                const ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
+                    ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                const { file, size } = await saveFetchByStream(await fetch(res.result.link.link), 'mp3', ukuranDokumenMaksimal);
+                if (size < ukuranAudioMaksimal)
+                    return {
+                        audio: { file: file },
+                        teks: res.result.title,
+                        _limit: limit,
+                    };
+                return {
+                    dokumen: { file: file, mimetype: 'audio/mp3', namaFile: res.result.title + '.mp3' },
+                    _limit: limit,
+                };
+            } catch (e) {
+                if (e === 'toobig')
+                    return {
+                        teks: $.TEKS('command/ytaudio/toobig')
+                            .replace('%alink', await getShortLink(res.result.link.link))
+                            .replace('%asize', res.result.link.size)
+                            .replace('%ares', res.result.link.bitrate + 'kb/s'),
+                    };
+                throw e;
+            }
         },
     },
     ytvideo: {
@@ -1128,46 +1076,33 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             if (!$.argumen) return { teks: $.TEKS('command/ytvideo') };
             if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytvideo') };
+            $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const res = await (await lolHumanAPI('ytvideo', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
-            return await new Promise((resolve, reject) => {
-                fetch(res.result.link.link)
-                    .then((_res) => {
-                        const filename = './tmp/' + utils.namaFileAcak() + '.mp4';
-                        const stream = fs.createWriteStream(filename);
-                        _res.body.pipe(stream);
-                        let size = 0,
-                            ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
-                            ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
-                        _res.body.on('data', async (chunk) => {
-                            size += chunk.length;
-                            if (size > ukuranDokumenMaksimal) {
-                                _res.body.close();
-                                resolve({
-                                    teks: $.TEKS('command/ytvideo/toobig')
-                                        .replace('%vlink', await getShortLink(res.result.link.link))
-                                        .replace('%vsize', res.result.link.size)
-                                        .replace('%vres', res.result.link.resolution),
-                                });
-                            }
-                        });
-                        _res.body.on('end', () => {
-                            limit.kurangi();
-                            if (size < ukuranVideoMaksimal) {
-                                resolve({
-                                    video: { file: filename },
-                                    teks: res.result.title,
-                                });
-                            } else {
-                                resolve({
-                                    dokumen: { file: filename, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
-                                });
-                            }
-                        });
-                        stream.on('error', reject);
-                    })
-                    .catch(reject);
-            });
+            try {
+                const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                    ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                const { file, size } = await saveFetchByStream(await fetch(res.result.link.link), 'mp4', ukuranDokumenMaksimal);
+                if (size < ukuranVideoMaksimal)
+                    return {
+                        video: { file: file },
+                        teks: res.result.title,
+                        _limit: limit,
+                    };
+                return {
+                    dokumen: { file: file, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
+                    _limit: limit,
+                };
+            } catch (e) {
+                if (e === 'toobig')
+                    return {
+                        teks: $.TEKS('command/ytvideo/toobig')
+                            .replace('%vlink', await getShortLink(res.result.link.link))
+                            .replace('%vsize', res.result.link.size)
+                            .replace('%vres', res.result.link.resolution),
+                    };
+                throw e;
+            }
         },
     },
     jadwaltv: {
@@ -1190,13 +1125,9 @@ const Perintah = {
     acaratv: {
         stx: '/acaratv (Indonesia)',
         cat: 'information',
-        lim: true,
         fn: async ($, data) => {
-            const limit = cekLimit($, data);
-            if (limit.val === 0) return limit.habis;
             const res = await (await lolHumanAPI('jadwaltv/now')).json();
             if (res.status != 200) throw res.message;
-            limit.kurangi();
             return {
                 teks: Object.entries(res.result)
                     .map((v) => `[${v[0].toUpperCase()}] ${v[1].trim().split('\n').reverse()[0]}`)
@@ -1212,48 +1143,1319 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\.|m\.|web\.|mbasic\.)?(facebook|fb)\.(com|watch)/.test($.argumen)) return { teks: $.TEKS('command/fbvideo') };
+            $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const res = await (await lolHumanAPI('facebook', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             if (!res.result) return { teks: $.TEKS('command/fbvideo/cantdownload') };
-            return await new Promise((resolve, reject) => {
-                fetch(res.result)
-                    .then((_res) => {
-                        const filename = './tmp/' + utils.namaFileAcak() + '.mp4';
-                        const stream = fs.createWriteStream(filename);
-                        _res.body.pipe(stream);
-                        let size = 0,
-                            ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
-                            ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
-                        _res.body.on('data', async (chunk) => {
-                            size += chunk.length;
-                            if (size > ukuranDokumenMaksimal) {
-                                _res.body.close();
-                                resolve({
-                                    teks: $.TEKS('command/fbvideo/toobig').replace('%vlink', await getShortLink(res.result)),
-                                });
-                            }
-                        });
-                        _res.body.on('end', () => {
-                            limit.kurangi();
-                            if (size < ukuranVideoMaksimal) {
-                                resolve({
-                                    video: { file: filename },
-                                });
-                            } else {
-                                resolve({
-                                    dokumen: { file: filename, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
-                                });
-                            }
-                        });
-                        stream.on('error', reject);
-                    })
-                    .catch(reject);
+            try {
+                const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                    ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                const { file, size } = await saveFetchByStream(await fetch(res.result), 'mp4', ukuranDokumenMaksimal);
+                if (size < ukuranVideoMaksimal)
+                    return {
+                        video: { file: file },
+                        _limit: limit,
+                    };
+                return {
+                    dokumen: { file: file, mimetype: 'video/mp4', namaFile: file },
+                    _limit: limit,
+                };
+            } catch (e) {
+                if (e === 'toobig')
+                    return {
+                        teks: $.TEKS('command/fbvideo/toobig').replace('%vlink', await getShortLink(res.result)),
+                    };
+                throw e;
+            }
+        },
+    },
+    cerpen: {
+        stx: '/cerpen (Indonesia)',
+        cat: 'fun',
+        fn: async ($, data) => {
+            const res = await (await lolHumanAPI('cerpen')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: `${res.result.title}\n\nKarangan: ${res.result.creator}\n\n\t${res.result.cerpen}`,
+            };
+        },
+    },
+    pantun: {
+        stx: '/pantun (Indonesia)',
+        cat: 'fun',
+        fn: async ($, data) => {
+            const res = await (await lolHumanAPI('random/pantun')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    puisi: {
+        stx: '/puisi (Indonesia)',
+        cat: 'fun',
+        fn: async ($, data) => {
+            const res = await (await lolHumanAPI('random/puisi')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    faktaunik: {
+        stx: '/faktaunik (Indonesia)',
+        cat: 'fun',
+        fn: async ($, data) => {
+            const res = await (await lolHumanAPI('random/faktaunik')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    ceritahoror: {
+        stx: '/ceritahoror (Indonesia)',
+        cat: 'fun',
+        fn: async ($, data) => {
+            const res = await (await lolHumanAPI('ceritahoror')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result.thumbnail ? { url: res.result.thumbnail } : undefined,
+                teks: `${res.result.title}\n\n${res.result.desc}\n\n\t${res.result.story}`,
+            };
+        },
+    },
+    googleimage: {
+        stx: '/googleimage [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/googleimage') };
+            const res = await (await lolHumanAPI('gimage2', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) {
+                const f = await lolHumanAPI('gimage', 'query=' + encodeURI($.argumen));
+                if (f.status != 200) throw f.statusText;
+                try {
+                    const { file } = await saveFetchByStream(f, 'jpg');
+                    return {
+                        gambar: { file: file },
+                    };
+                } catch (e) {
+                    throw e;
+                }
+            } else {
+                const result = _.sample(res.result);
+                return {
+                    gambar: { url: result },
+                    teks: result,
+                };
+            }
+        },
+    },
+    pinterest: {
+        stx: '/pinterest [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/pinterest') };
+            let res = await (await lolHumanAPI('pinterest2', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) res = await (await lolHumanAPI('pinterest', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const result = Array.isArray(res.result) ? _.sample(res.result) : res.result;
+            return {
+                gambar: { url: result },
+                teks: result,
+            };
+        },
+    },
+    katabijak: {
+        stx: '/katabijak [q] (Indonesia)',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/katabijak') };
+            let res = await (await lolHumanAPI('searchbijak', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const result = _.sample(res.result);
+            return {
+                teks: `"${result.quote}"\n\n- ${result.author}`,
+            };
+        },
+    },
+    couplepic: {
+        stx: '/couplepic',
+        cat: 'randomimage',
+        fn: async ($, data) => {
+            let res = await (await lolHumanAPI('random/ppcouple')).json();
+            if (res.status != 200) throw res.message;
+            const { _e } = await _kirimPesan($.pengirim, {
+                gambar: { url: res.result.male },
+                teks: res.result.male,
+                re: true,
+                mid: $.mid,
             });
+            if (_e) throw _e;
+            return {
+                gambar: { url: res.result.female },
+                teks: res.result.female,
+            };
+        },
+    },
+    bts: {
+        stx: '/BTS',
+        cat: 'randomimage',
+        fn: async ($, data, { endpoint } = {}) => {
+            const { file } = await saveFetchByStream(await lolHumanAPI(endpoint || 'random/bts'), 'jpg');
+            return {
+                gambar: { file: file },
+            };
+        },
+    },
+    exo: {
+        stx: '/EXO',
+        cat: 'randomimage',
+        fn: async ($, data) => {
+            return await Perintah.bts.fn($, data, { endpoint: 'random/exo' });
+        },
+    },
+    prettygirls: {
+        stx: '/prettygirls',
+        cat: 'randomimage',
+        fn: async ($, data) => {
+            return await Perintah.bts.fn($, data, { endpoint: 'random/cecan' });
+        },
+    },
+    handsomeguys: {
+        stx: '/handsomeguys',
+        cat: 'randomimage',
+        fn: async ($, data) => {
+            return await Perintah.bts.fn($, data, { endpoint: 'random/cogan' });
+        },
+    },
+    aesthetic: {
+        stx: '/aesthetic',
+        cat: 'randomimage',
+        fn: async ($, data) => {
+            return await Perintah.bts.fn($, data, { endpoint: 'random/estetic' });
+        },
+    },
+    erufu: {
+        stx: '/erufu',
+        cat: 'randomimage',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            const { file } = await saveFetchByStream(await lolHumanAPI('random/elf'), 'jpg');
+            return {
+                gambar: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    neko: {
+        stx: '/neko',
+        cat: 'randomimage',
+        lim: true,
+        fn: async ($, data, { endpoints } = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            endpoints = _.shuffle(endpoints || ['random/neko', 'random2/neko']);
+            let f, e;
+            for (const endpoint of endpoints) {
+                e = endpoint;
+                f = await lolHumanAPI(endpoint);
+                if (f.status == 200) break;
+            }
+            if (f.status != 200) throw `${f.status} ${e}`;
+            const { file } = await saveFetchByStream(f, 'jpg');
+            return {
+                gambar: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    waifu: {
+        stx: '/waifu',
+        cat: 'randomimage',
+        fn: async ($, data, { endpoints } = {}) => {
+            endpoints = endpoints || ['random/waifu', 'random2/waifu'];
+            let f, e;
+            for (const endpoint of endpoints) {
+                e = endpoint;
+                f = await lolHumanAPI(endpoint);
+                if (f.status == 200) break;
+            }
+            if (f.status != 200) throw `${f.status} ${e}`;
+            const { file } = await saveFetchByStream(f, 'jpg');
+            return {
+                gambar: { file: file },
+            };
+        },
+    },
+    husbu: {
+        stx: '/husbu',
+        cat: 'randomimage',
+        fn: async ($, data) => {
+            return await Perintah.bts.fn($, data, { endpoint: 'random/husbu' });
+        },
+    },
+    blackpink: {
+        stx: '/blackpink',
+        cat: 'randomimage',
+        fn: async ($, data) => {
+            return await Perintah.bts.fn($, data, { endpoint: 'random/blackpink' });
+        },
+    },
+    feed: {
+        stx: '/feed',
+        cat: 'reactions',
+        fn: async ($, { endpoint } = {}) => {
+            const f = await lolHumanAPI(endpoint || 'random2/feed');
+            if (f.status != 200) throw `${res.status} ${endpoint}`;
+            if (f.headers.get('content-type') === 'image/gif') {
+                const { file } = await saveFetchByStream(f, 'gif');
+                if ($.platform === 'WA') {
+                    file = await gif.keMp4(file);
+                    return {
+                        video: { file: file, gif: true },
+                    };
+                } else
+                    return {
+                        video: { file: file, gif: true },
+                    };
+            } else if (['image/jpeg', 'image/png'].includes(f.headers.get('content-type'))) {
+                const { file } = await saveFetchByStream(f, 'jpg');
+                return {
+                    gambar: { file: file },
+                };
+            } else {
+                throw `not an image, received: ${res.headers.get('content-type')}`;
+            }
+        },
+    },
+    poke: {
+        stx: '/poke',
+        cat: 'reactions',
+        fn: async ($, { endpoints } = {}) => {
+            endpoints = _.shuffle(endpoints || ['random/poke', 'random2/poke']);
+            let f, e;
+            for (const endpoint of endpoints) {
+                e = endpoint;
+                f = await lolHumanAPI(endpoint);
+                if (f.status == 200) break;
+            }
+            if (f.status != 200) throw `${f.status} ${e}`;
+            if (f.headers.get('content-type') === 'image/gif') {
+                const { file } = await saveFetchByStream(f, 'gif');
+                if ($.platform === 'WA') {
+                    file = await gif.keMp4(file);
+                    return {
+                        video: { file: file, gif: true },
+                    };
+                } else
+                    return {
+                        video: { file: file, gif: true },
+                    };
+            } else if (['image/jpeg', 'image/png'].includes(f.headers.get('content-type'))) {
+                const { file } = await saveFetchByStream(f, 'jpg');
+                return {
+                    gambar: { file: file },
+                };
+            } else {
+                throw `not an image, received: ${res.headers.get('content-type')}`;
+            }
+        },
+    },
+    kiss: {
+        stx: '/kiss',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.poke.fn($, { endpoints: ['random/kiss', 'random2/kiss'] });
+        },
+    },
+    smug: {
+        stx: '/smug',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.poke.fn($, { endpoints: ['random/smug', 'random2/smug'] });
+        },
+    },
+    baka: {
+        stx: '/baka',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random2/baka' });
+        },
+    },
+    tickle: {
+        stx: '/tickle',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random2/tickle' });
+        },
+    },
+    cuddle: {
+        stx: '/cuddle',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.poke.fn($, { endpoints: ['random/cuddle', 'random2/cuddle'] });
+        },
+    },
+    bully: {
+        stx: '/bully',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/bully' });
+        },
+    },
+    cry: {
+        stx: '/cry',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/cry' });
+        },
+    },
+    hug: {
+        stx: '/hug',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/hug' });
+        },
+    },
+    lick: {
+        stx: '/lick',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/lick' });
+        },
+    },
+    bonk: {
+        stx: '/bonk',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/bonk' });
+        },
+    },
+    yeet: {
+        stx: '/yeet',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/yeet' });
+        },
+    },
+    blush: {
+        stx: '/blush',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/blush' });
+        },
+    },
+    smile: {
+        stx: '/smile',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/smile' });
+        },
+    },
+    wave: {
+        stx: '/wave',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/wave' });
+        },
+    },
+    highfive: {
+        stx: '/highfive',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/highfive' });
+        },
+    },
+    handhold: {
+        stx: '/handhold',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/handhold' });
+        },
+    },
+    nom: {
+        stx: '/nom',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/nom' });
+        },
+    },
+    bite: {
+        stx: '/bite',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/bite' });
+        },
+    },
+    glomp: {
+        stx: '/glomp',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/glomp' });
+        },
+    },
+    kill: {
+        stx: '/kill',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/kill' });
+        },
+    },
+    slap: {
+        stx: '/slap',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/slap' });
+        },
+    },
+    happy: {
+        stx: '/happy',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/happy' });
+        },
+    },
+    wink: {
+        stx: '/wink',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/wink' });
+        },
+    },
+    dance: {
+        stx: '/dance',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/dance' });
+        },
+    },
+    cringe: {
+        stx: '/cringe',
+        cat: 'reactions',
+        fn: async ($) => {
+            return await Perintah.feed.fn($, { endpoint: 'random/cringe' });
+        },
+    },
+    anime: {
+        stx: '/anime [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/anime') };
+            const res = await (await lolHumanAPI('anime', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const _ = res.result;
+            return {
+                gambar: res.result?.coverImage?.large ? { url: res.result?.coverImage?.large } : undefined,
+                teks: `EN: ${_.title.english || '-'}\nJP: ${_.title.native} (${_.title.romaji})\n${_.idMal ? '\nmyanimelist.net/anime/' + _.idMal : ''}\nFormat: ${
+                    _.format
+                }\nEpisodes: ${_.episodes}\nDuration: ${_.duration} min.\nStatus: ${_.status}\nSeason: ${_.season} (${_.seasonYear})\nGenres: ${_.genres.join(
+                    ', '
+                )}.\nStart: ${Object.values(_.startDate).join('-')}\nEnd: ${Object.values(_.endDate).join('-')}\nScore: ${_.averageScore}\nSynonyms: ${_.synonyms.join(
+                    ' / '
+                )}.${_.nextAiringEpisode ? '\nNext airing episode: ' + _.nextAiringEpisode : ''}\n\nDescription: ${_.description}\n\nCharacters: ${_.characters.nodes
+                    .map((v) => `${v.name.full} (${v.name.native})`)
+                    .join(', ')}`,
+            };
+        },
+    },
+    manga: {
+        stx: '/manga [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/manga') };
+            const res = await (await lolHumanAPI('manga', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const _ = res.result;
+            return {
+                gambar: res.result?.coverImage?.large ? { url: res.result?.coverImage?.large } : undefined,
+                teks: `EN: ${_.title.english || '-'}\nJP: ${_.title.native} (${_.title.romaji})\n${_.idMal ? '\nmyanimelist.net/manga/' + _.idMal : ''}\nFormat: ${
+                    _.format
+                }\nChapters: ${_.chapters}\nVolumes: ${_.volumes}\nStatus: ${_.status}\nSource: ${_.source}\nGenres: ${_.genres.join(', ')}.\nStart: ${Object.values(
+                    _.startDate
+                ).join('-')}\nEnd: ${Object.values(_.endDate).join('-')}\nScore: ${_.averageScore}\nSynonyms: ${_.synonyms.join(' / ')}.\n\nDescription: ${
+                    _.description
+                }\n\nCharacters: ${_.characters.nodes.map((v) => `${v.name.full} (${v.name.native})`).join(', ')}`,
+            };
+        },
+    },
+    animangachar: {
+        stx: '/animangachar [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/animangachar') };
+            const res = await (await lolHumanAPI('character', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const _ = res.result;
+            return {
+                gambar: res.result?.image?.large ? { url: res.result?.image?.large } : undefined,
+                teks: `${_.name.full} (${_.name.native})\n\nDescription: ${_.description}\n\nMedia:\n${_.media.nodes
+                    .map((v, i) => `${i + 1}. [${v.type}] ${v.title.romaji} (${v.title.native})`)
+                    .join('\n')}`,
+            };
+        },
+    },
+    whatanime: {
+        stx: '/whatanime',
+        cat: 'searchengine',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if ($.gambar || $.q?.gambar) {
+                const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
+                const { size } = await fsp.stat(file);
+                const form = new FormData();
+                const stream = fs.createReadStream(file);
+                form.append('img', stream, { knownLength: size });
+                const res = await (await postToLolHumanAPI('wait', form)).json();
+                if (res.status != 200) throw res.message;
+                return {
+                    video: res.result.video ? { url: res.result.video } : undefined,
+                    teks: $.TEKS('command/whatanime/result')
+                        .replace('%sim', res.result.similarity)
+                        .replace('%eng', res.result.title_english)
+                        .replace('%jp', res.result.title_native)
+                        .replace('%ro', res.result.title_romaji)
+                        .replace('%at', res.result.at)
+                        .replace('%eps', res.result.episode),
+                    _limit: limit,
+                };
+            } else {
+                return {
+                    teks: $.TEKS('command/whatanime/nomedia'),
+                };
+            }
+        },
+    },
+    whatmanga: {
+        stx: '/whatmanga',
+        cat: 'searchengine',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if ($.gambar || $.q?.gambar) {
+                const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
+                const { size } = await fsp.stat(file);
+                const form = new FormData();
+                const stream = fs.createReadStream(file);
+                form.append('img', stream, { knownLength: size });
+                const res = await (await postToLolHumanAPI('wmit', form)).json();
+                if (res.status != 200) throw res.message;
+                return {
+                    teks: $.TEKS('command/whatmanga/result')
+                        .replace('%sim', res.result[0].similarity)
+                        .replace('%title', res.result[0].title)
+                        .replace('%part', res.result[0].part)
+                        .replace('%urls', res.result[0].urls.join('\n')),
+                    _limit: limit,
+                };
+            } else {
+                return {
+                    teks: $.TEKS('command/whatmanga/nomedia'),
+                };
+            }
+        },
+    },
+    otakudesu: {
+        stx: '/otakudesu [q/url] (Indonesia)',
+        cat: 'searchengine',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/otakudesu') };
+            let res;
+            if (/^(https?:\/\/)?(www\.)?otakudesu\.moe\//.test($.argumen.trim())) {
+                res = await (await lolHumanAPI('otakudesu', 'url=' + encodeURI($.argumen.trim()))).json();
+            } else {
+                res = await (await lolHumanAPI('otakudesusearch', 'query=' + encodeURI($.argumen.trim()))).json();
+            }
+            if (res.status != 200) throw res.message;
+            const file = `./tmp/${utils.namaFileAcak()}.txt`;
+            await fsp.writeFile(
+                file,
+                res.result.link_dl
+                    .map(
+                        (v) =>
+                            `• ${v.title}\n${v.link_dl
+                                .map(
+                                    (v) =>
+                                        `${v.reso} -- ${v.size}\n${Object.entries(v.link_dl)
+                                            .map((v) => `[${v[0]}] ${v[1]}`)
+                                            .join('\n')}`
+                                )
+                                .join('\n')}`
+                    )
+                    .join('\n\n')
+            );
+            return {
+                dokumen: { file: file, mimetype: 'text/plain', namaFile: res.result.title },
+                teks: $.TEKS('command/otakudesu/result')
+                    .replace('%titlejp', res.result.japanese)
+                    .replace('%title', res.result.title)
+                    .replace('%type', res.result.type)
+                    .replace('%eps', res.result.episodes)
+                    .replace('%dur', res.result.duration)
+                    .replace('%genres', res.result.duration)
+                    .replace('%aired', res.result.aired)
+                    .replace('%prod', res.result.producers)
+                    .replace('%stu', res.result.studios)
+                    .replace('%rate', res.result.rating)
+                    .replace('%creds', res.result.credit),
+            };
+        },
+    },
+    kusonime: {
+        stx: '/kusonime [q/url] (Indonesia)',
+        cat: 'searchengine',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/kusonime') };
+            let res;
+            if (/^(https?:\/\/)?(www\.)?kusonime\.com\//.test($.argumen.trim())) {
+                res = await (await lolHumanAPI('kusonime', 'url=' + encodeURI($.argumen.trim()))).json();
+            } else {
+                res = await (await lolHumanAPI('kusonimesearch', 'query=' + encodeURI($.argumen.trim()))).json();
+            }
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result.thumbnail ? { url: res.result.thumbnail } : undefined,
+                teks: $.TEKS('command/kusonime/result')
+                    .replace('%title', res.result.title)
+                    .replace('%jp', res.result.japanese)
+                    .replace('%genres', res.result.genre)
+                    .replace('%season', res.result.seasons)
+                    .replace('%prod', res.result.producers)
+                    .replace('%type', res.result.type)
+                    .replace('%status', res.result.status)
+                    .replace('%eps', res.result.total_episode)
+                    .replace('%score', res.result.score)
+                    .replace('%dur', res.result.duration)
+                    .replace('%release', res.result.released_on)
+                    .replace('%desc', res.result.desc)
+                    .replace(
+                        '%dl',
+                        Object.entries(res.result.link_dl)
+                            .map(
+                                (v) =>
+                                    `• ${v[0]}\n${Object.entries(v[1])
+                                        .map((v) => `[${v[0]}] ${v[1]}`)
+                                        .join('\n')}`
+                            )
+                            .join('\n\n')
+                    ),
+            };
+        },
+    },
+    lk21: {
+        stx: '/lk21 [q] (Indonesia)',
+        cat: 'searchengine',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/lk21') };
+            const res = await (await lolHumanAPI('lk21', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result.thumbnail ? { url: res.result.thumbnail } : undefined,
+                teks: $.TEKS('command/lk21/result')
+                    .replace('%title', res.result.title)
+                    .replace('%link', res.result.link)
+                    .replace('%genres', res.result.genre)
+                    .replace('%dur', res.result.duration)
+                    .replace('%release', res.result.date_release)
+                    .replace('%rate', res.result.rating)
+                    .replace('%views', res.result.views)
+                    .replace('%lang', res.result.language)
+                    .replace('%loc', res.result.location)
+                    .replace('%dlink', res.result.link_dl || '-')
+                    .replace('%desc', res.result.desc)
+                    .replace('%actor', res.result.actors.join(', ')),
+                _limit: res.result.link_dl ? limit : undefined,
+            };
+        },
+    },
+    jooxdl: {
+        stx: '/jooxdl [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/jooxdl') };
+            if (!/^(https?:\/\/)?(www\.)?joox\.com\//.test($.argumen)) return { teks: $.TEKS('command/jooxdl') };
+            const id = new URL(($.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen)).pathname.split('/').reverse()[0];
+            const res = await (await lolHumanAPI('joox/' + id)).json();
+            if (res.status != 200) throw res.message;
+            res.result.audio = res.result.audio?.reverse?.()?.filter?.((v) => v.link);
+            if (!res.result.audio?.length) throw 'noaudio';
+            const ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
+                ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+            const { file, size } = await saveFetchByStream(await fetch(res.result.audio[0].link), 'mp3', ukuranDokumenMaksimal);
+            if (size < ukuranAudioMaksimal)
+                return {
+                    audio: { file: file },
+                    _limit: limit,
+                };
+            return {
+                dokumen: { file: file, mimetype: 'audio/mp3', namaFile: res.result.title + '.mp3' },
+                _limit: limit,
+            };
+        },
+    },
+    spotify: {
+        stx: '/spotify [q]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/spotify') };
+            const res = await (await lolHumanAPI('spotifysearch', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result
+                    .sort((a, b) => a.popularity - b.popularity)
+                    .map((v) => `• ${v.artists} - ${v.title}\n[${Math.floor(v.duration / 60) + ':' + (v.duration % 60)}] ${v.link}`)
+                    .join('\n\n'),
+            };
+        },
+    },
+    spotifydl: {
+        stx: '/spotifydl [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/spotifydl') };
+            if (!/^(https?:\/\/)?(www\.|open\.)?spotify\.com\//.test($.argumen)) return { teks: $.TEKS('command/spotifydl') };
+            const res = await (await lolHumanAPI('spotify', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
+                ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+            const { file, size } = await saveFetchByStream(await fetch(res.result.link), 'mp3', ukuranDokumenMaksimal);
+            if (size < ukuranAudioMaksimal)
+                return {
+                    audio: { file: file },
+                    _limit: limit,
+                };
+            return {
+                dokumen: { file: file, mimetype: 'audio/mp3', namaFile: res.result.title + '.mp3' },
+                _limit: limit,
+            };
+        },
+    },
+    twittervideo: {
+        stx: '/twittervideo [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            if (!$.argumen) return { teks: $.TEKS('command/twittervideo') };
+            if (!/^(https?:\/\/)?(www\.)?twitter\.com\//.test($.argumen)) return { teks: $.TEKS('command/twittervideo') };
+            const res = await (await lolHumanAPI('twitter2', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const reso = Object.fromEntries(res.result.link.map((v) => [new URL(v.url).pathname.split('/')[5].split('x')[1] + 'p', v.url]));
+            waiter.tambahkan($.pengirim, ['twittervideo'], reso);
+            return {
+                gambar: res.result.thumbnail ? { url: res.result.thumbnail } : undefined,
+                teks: $.TEKS('command/twittervideo/result')
+                    .replace('%name', res.result.user?.name)
+                    .replace('%usrname', res.result.user?.username)
+                    .replace('%date', res.result.publish)
+                    .replace('%capt', res.result.title)
+                    .replace(
+                        '%res',
+                        Object.keys(reso)
+                            .map((v) => `/${v} => ${v.toUpperCase()}`)
+                            .join('\n')
+                    ),
+            };
+        },
+        hd: async (waiter, $, data) => {
+            if ($.perintah === 'cancel') {
+                waiter.hapus();
+                return { teks: $.TEKS('user/dialogcancelled').replace('%d', 'twittervideo') };
+            } else {
+                let link;
+                if ((link = waiter.val[$.perintah])) {
+                    const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                        ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                    const { file, size } = await saveFetchByStream(await fetch(link), 'mp4', ukuranDokumenMaksimal);
+                    waiter.hapus();
+                    if (size < ukuranVideoMaksimal)
+                        return {
+                            video: { file: file },
+                            _limit: cekLimit($, data),
+                        };
+                    return {
+                        dokumen: { file: file, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
+                        _limit: cekLimit($, data),
+                    };
+                } else {
+                    return waiter.notice('/cancel', 'twittervideo');
+                }
+            }
+        },
+    },
+    instagramdl: {
+        stx: '/instagramdl [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            if (!$.argumen) return { teks: $.TEKS('command/instagramdl') };
+            if (!/^(https?:\/\/)?(www\.)?instagram\.com\//.test($.argumen)) return { teks: $.TEKS('command/instagramdl') };
+            const res = await (await lolHumanAPI('instagram', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            if (res.result.length === 1) {
+                const f = await fetch(res.result[0]);
+                if (f.headers.get('content-type') === 'video/mp4') {
+                    const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                        ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                    const { file, size } = await saveFetchByStream(f, 'mp4', ukuranDokumenMaksimal);
+                    console.log(size);
+                    if (size < ukuranVideoMaksimal)
+                        return {
+                            video: { file: file },
+                            _limit: limit,
+                        };
+                    return {
+                        dokumen: { file: file, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
+                        _limit: limit,
+                    };
+                } else if (['image/jpeg', 'image/png'].includes(f.headers.get('content-type'))) {
+                    const { file } = await saveFetchByStream(f, 'jpg');
+                    return {
+                        gambar: { file: file },
+                        _limit: limit,
+                    };
+                } else {
+                    throw 'nomedia';
+                }
+            } else if (res.result.length > 1) {
+                waiter.tambahkan($.pengirim, ['instagramdl'], { medias: res.result });
+                return {
+                    teks: $.TEKS('command/instagramdl/result').replace('%count', res.result.length),
+                };
+            } else {
+                throw 'nolink';
+            }
+        },
+        hd: async (waiter, $, data) => {
+            if ($.perintah === 'cancel') {
+                waiter.hapus();
+                return { teks: $.TEKS('user/dialogcancelled').replace('%d', 'instagramdl') };
+            } else if ($.perintah === 'all') {
+                Promise.allSettled(
+                    waiter.val.medias.map(
+                        (v, i) =>
+                            new Promise(async (resolve, reject) => {
+                                try {
+                                    const f = await fetch(v);
+                                    if (f.headers.get('content-type') === 'video/mp4') {
+                                        const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                                            ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                                        const { file, size } = await saveFetchByStream(f, 'mp4', ukuranDokumenMaksimal);
+                                        if (size < ukuranVideoMaksimal)
+                                            return resolve(
+                                                kirimPesan($.pengirim, {
+                                                    video: { file: file },
+                                                    re: true,
+                                                    mid: $.mid,
+                                                })
+                                            );
+                                        return resolve(
+                                            kirimPesan($.pengirim, {
+                                                dokumen: { file: file, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
+                                                re: true,
+                                                mid: $.mid,
+                                            })
+                                        );
+                                    } else if (['image/jpeg', 'image/png'].includes(f.headers.get('content-type'))) {
+                                        const { file } = await saveFetchByStream(f, 'jpg');
+                                        return resolve(
+                                            kirimPesan($.pengirim, {
+                                                gambar: { file: file },
+                                                re: true,
+                                                mid: $.mid,
+                                            })
+                                        );
+                                    } else {
+                                        return reject(
+                                            kirimPesan($.pengirim, {
+                                                teks: $.TEKS('command/instagramdl/fail').replace('%c', i),
+                                                re: true,
+                                                mid: $.mid,
+                                            })
+                                        );
+                                    }
+                                } catch (e) {
+                                    console.log(e);
+                                    return reject(
+                                        kirimPesan($.pengirim, {
+                                            teks: $.TEKS('command/instagramdl/fail').replace('%c', i),
+                                            re: true,
+                                            mid: $.mid,
+                                        })
+                                    );
+                                }
+                            })
+                    )
+                ).then((v) => {
+                    waiter.hapus();
+                    v.filter((v) => v.status === 'fulfilled').length && cekLimit($, data).kurangi();
+                });
+            } else if (parseInt($.perintah) > 0 && parseInt($.perintah) <= waiter.val.medias.length) {
+                const link = waiter.val.medias[parseInt($.perintah) - 1];
+                const f = await fetch(link);
+                if (f.headers.get('content-type') === 'video/mp4') {
+                    const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
+                        ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
+                    const { file, size } = await saveFetchByStream(f, 'mp4', ukuranDokumenMaksimal);
+                    waiter.hapus();
+                    if (size < ukuranVideoMaksimal)
+                        return {
+                            video: { file: file },
+                            _limit: cekLimit($, data),
+                        };
+                    return {
+                        dokumen: { file: file, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
+                        _limit: cekLimit($, data),
+                    };
+                } else if (['image/jpeg', 'image/png'].includes(f.headers.get('content-type'))) {
+                    const { file } = await saveFetchByStream(f, 'jpg');
+                    waiter.hapus();
+                    return {
+                        gambar: { file: file },
+                        _limit: cekLimit($, data),
+                    };
+                } else {
+                    waiter.hapus();
+                    throw 'nomedia';
+                }
+            } else {
+                return waiter.notice('/cancel', 'instagramdl');
+            }
+        },
+    },
+    tiktokvideo: {
+        stx: '/tiktokvideo [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/tiktokvideo') };
+            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokvideo') };
+            const f = await lolHumanAPI('tiktokwm', 'url=' + encodeURI($.argumen));
+            if (f.status != 200) throw `${f.status} tiktokwm`;
+            const { file } = await saveFetchByStream(f, 'mp4');
+            return {
+                video: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    tiktokvideonowm: {
+        stx: '/tiktokvideoNoWM [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/tiktokvideonowm') };
+            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokvideonowm') };
+            let link, res, e;
+            const endpoints = _.shuffle(['tiktok', 'tiktok2', 'tiktok3']);
+            for (const endpoint of endpoints) {
+                e = endpoint;
+                res = await (await lolHumanAPI(endpoint, 'url=' + encodeURI($.argumen))).json();
+                if (res.status == 200) break;
+            }
+            if (res.status != 200) throw `${res.status} ${res.message} ${e}`;
+            if (e === 'tiktok') {
+                link = res.result.link;
+            } else {
+                link = res.result;
+            }
+            const { file } = await saveFetchByStream(await fetch(link), 'mp4');
+            return {
+                video: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    tiktokaudio: {
+        stx: '/tiktokaudio [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/tiktokaudio') };
+            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokaudio') };
+            const f = await lolHumanAPI('tiktokmusic', 'url=' + encodeURI($.argumen));
+            if (f.status != 200) throw `${f.status} tiktokmusic`;
+            const { file } = await saveFetchByStream(f, 'mp3');
+            return {
+                audio: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    mediafiredl: {
+        stx: '/mediafiredl [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\.)?mediafire\.com\//.test($.argumen)) return { teks: $.TEKS('command/mediafiredl') };
+            const res = await (await lolHumanAPI('mediafire', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.link;
+            const f = await fetch(link);
+            const maxSize = ukuranMaksimal.dokumen[$.platform];
+            if (+f.headers.get('content-length') > maxSize) return { teks: $.TEKS('command/mediafiredl/toobig').replace('%link', await getShortLink(link)) };
+            const { file } = await saveFetchByStream(f, mimetypes.extension(f.headers.get('content-type')), maxSize);
+            return {
+                dokumen: { file: file, mimetype: f.headers.get('content-type'), namaFile: res.result.filename },
+                _limit: limit,
+            };
+        },
+    },
+    zippysharedl: {
+        stx: '/zippysharedl [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\d+\.)?zippyshare\.com\//.test($.argumen)) return { teks: $.TEKS('command/zippysharedl') };
+            const res = await (await lolHumanAPI('zippyshare', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.download_url;
+            const f = await fetch(link);
+            const maxSize = ukuranMaksimal.dokumen[$.platform];
+            if (+f.headers.get('content-length') > maxSize) return { teks: $.TEKS('command/zippysharedl/toobig').replace('%link', await getShortLink(link)) };
+            const { file } = await saveFetchByStream(f, mimetypes.extension(f.headers.get('content-type')), maxSize);
+            return {
+                dokumen: { file: file, mimetype: f.headers.get('content-type'), namaFile: res.result.filename },
+                _limit: limit,
+            };
+        },
+    },
+    pinterestimage: {
+        stx: '/pinterestimage [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/zippysharedl') };
+            const res = await (await lolHumanAPI('pinterestdl', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = Object.entries(res.result).sort((a, b) => b[0] - a[0])[0][1];
+            const f = await fetch(link);
+            const { file } = await saveFetchByStream(f, 'jpg');
+            return {
+                gambar: { file: file },
+                teks: link,
+                _limit: limit,
+            };
+        },
+    },
+    pinterestvideo: {
+        stx: '/pinterestvideo [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestvideo') };
+            const res = await (await lolHumanAPI('pinterestvideo', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = Object.entries(res.result).sort((a, b) => b[0] - a[0])[0][1];
+            const f = await fetch(link);
+            const maxDocSize = ukuranMaksimal.dokumen[$.platform];
+            const maxVidSize = ukuranMaksimal.video[$.platform];
+            if (+f.headers.get('content-length') > maxDocSize) return { teks: $.TEKS('command/pinterestvideo/toobig').replace('%link', link) };
+            try {
+                const { file, size } = await saveFetchByStream(f, 'mp4', maxDocSize);
+                if (size < maxVidSize) {
+                    return {
+                        video: { file: file },
+                        _limit: limit,
+                    };
+                } else {
+                    return {
+                        dokumen: { file: file, mimetype: 'video/mp4', namaFile: 'pinterest.mp4' },
+                        _limit: limit,
+                    };
+                }
+            } catch (e) {
+                if (e === 'toobig') return { teks: $.TEKS('command/pinterestvideo/toobig').replace('%link', link) };
+                throw e;
+            }
+        },
+    },
+    sharechatvideo: {
+        stx: '/sharechatvideo [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\.)?sharechat\.com\/video\//.test($.argumen)) return { teks: $.TEKS('command/sharechatvideo') };
+            const res = await (await lolHumanAPI('sharechat', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.link_dl;
+            const f = await fetch(link);
+            const { file } = await saveFetchByStream(f, 'mp4');
+            return {
+                video: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    snackvideo: {
+        stx: '/snackvideo [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\.)?sck\.io\/p/.test($.argumen)) return { teks: $.TEKS('command/snackvideo') };
+            const res = await (await lolHumanAPI('snackvideo', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.link_dl;
+            const f = await fetch(link);
+            const { file } = await saveFetchByStream(f, 'mp4');
+            return {
+                video: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    smulevideo: {
+        stx: '/smulevideo [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smulevideo') };
+            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.video;
+            const f = await fetch(link);
+            const { file } = await saveFetchByStream(f, 'mp4');
+            return {
+                video: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    smuleaudio: {
+        stx: '/smuleaudio [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smuleaudio') };
+            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.audio;
+            const f = await fetch(link);
+            const { file } = await saveFetchByStream(f, 'm4a');
+            return {
+                audio: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    cocofun: {
+        stx: '/cocofun [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\.)?(icocofun\.com|i\.coco\.fun)\//.test($.argumen)) return { teks: $.TEKS('command/cocofun') };
+            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.withwm;
+            const f = await fetch(link);
+            const { file } = await saveFetchByStream(f, 'mp4');
+            return {
+                video: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    cocofunnowm: {
+        stx: '/cocofunNoWM [link]',
+        cat: 'downloader',
+        lim: true,
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!/^(https?:\/\/)?(www\.)?(icocofun\.com|i\.coco\.fun)\//.test($.argumen)) return { teks: $.TEKS('command/cocofunnowm') };
+            const res = await (await lolHumanAPI('cocofun', 'url=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            const link = res.result.nowm;
+            const f = await fetch(link);
+            const { file } = await saveFetchByStream(f, 'mp4');
+            return {
+                video: { file: file },
+                _limit: limit,
+            };
         },
     },
 };
 
 //////////////////// FUNGSI PEMBANTU
+
+function saveFetchByStream(res, ext, maxSize) {
+    return new Promise((resolve, reject) => {
+        if (maxSize && +res.headers.get('content-length') > maxSize) {
+            res.body.close();
+            reject('toobig');
+        }
+        const filename = `./tmp/${utils.namaFileAcak()}.${ext}`;
+        const stream = fs.createWriteStream(filename);
+        res.body.pipe(stream);
+        let size = 0;
+        res.body.on('data', (chunk) => {
+            size += chunk.length;
+            if (maxSize && size > maxSize) {
+                res.body.close();
+                reject('toobig');
+            }
+        });
+        res.body.on('end', () =>
+            resolve({
+                file: filename,
+                size: size,
+            })
+        );
+        res.body.on('error', reject);
+        stream.on('error', reject);
+    });
+}
 
 function listPerintah(listKategori, perintahObj) {
     const map = {};
@@ -1300,6 +2502,15 @@ async function getShortLink(link) {
 
 function lolHumanAPI(API, ...params) {
     return fetch(`https://api.lolhuman.xyz/api/${API}?apikey=${argv.lolHumanAPIkey}&${params.join('&')}`);
+}
+
+function postToLolHumanAPI(API, body, opts = {}) {
+    return fetch(`https://api.lolhuman.xyz/api/${API}?apikey=${argv.lolHumanAPIkey}`, {
+        method: 'POST',
+        credentials: 'include',
+        body: body,
+        ...opts,
+    });
 }
 
 async function fetchJSON(link) {

@@ -268,7 +268,7 @@ async function kirimPesan(pesan) {
     } catch (e) {
         log(6);
         console.error(e);
-        return { s: false };
+        return { s: false, _e: e };
     }
 }
 
