@@ -16,7 +16,7 @@ const webp = require('../alat/webp_konversi');
 //////////////////// VARS
 
 const pid = Math.random().toString(36).slice(2);
-const argv = JSON.parse(process.argv[2]);
+const creds = JSON.parse(fs.readFileSync('./creds.json'));
 const TEKS = {};
 
 for (const file of fs.readdirSync('./res/teks')) {
@@ -64,7 +64,7 @@ async function proses(pesan) {
     }
 
     ////////// SIMSIMI
-    else if (cache.data.simsimi[$.pengirim]) {
+    else if ((cache.data.simsimi ||= {})[$.pengirim]) {
         simsimi($, data);
     }
 }
@@ -374,6 +374,9 @@ async function validasiUser($, data) {
         }
     }
     cdcmd[$.uid] = Date.now();
+    for (const id in cdcmd) {
+        if (Date.now() - cdcmd[id] > 10000) delete cdcmd[id];
+    }
     return r;
 }
 
@@ -2616,11 +2619,11 @@ async function getShortLink(link) {
 }
 
 function lolHumanAPI(API, ...params) {
-    return fetch(`https://api.lolhuman.xyz/api/${API}?apikey=${argv.lolHumanAPIkey}&${params.join('&')}`);
+    return fetch(`https://api.lolhuman.xyz/api/${API}?apikey=${creds.lolHumanAPIkey}&${params.join('&')}`);
 }
 
 function postToLolHumanAPI(API, body, opts = {}) {
-    return fetch(`https://api.lolhuman.xyz/api/${API}?apikey=${argv.lolHumanAPIkey}`, {
+    return fetch(`https://api.lolhuman.xyz/api/${API}?apikey=${creds.lolHumanAPIkey}`, {
         method: 'POST',
         credentials: 'include',
         body: body,
@@ -2654,7 +2657,7 @@ function _kirimPesan(penerima, pesan) {
 
 function cekDev(id) {
     id = id.replace(/^[A-Z]{2,3}#/, '');
-    for (const devId of argv.devids.split(',')) {
+    for (const devId of creds.devids) {
         if (id === devId) return true;
     }
     return false;
@@ -2738,7 +2741,7 @@ process.on('message', async (pesan) => {
 process.on('exit', () => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.data)));
 
 function log(kode, ...argumen2) {
-    if (!argv.dev) return;
+    if (!creds.dev) return;
     return console.log(
         [
             `[PERINTAH] [LOG] memuat file translasi`, // 0
@@ -2754,7 +2757,7 @@ function log(kode, ...argumen2) {
     );
 }
 
-if (argv.watch) {
+if (creds.watch) {
     require('fs').watch(__filename, () => {
         log(7);
         process.exit();

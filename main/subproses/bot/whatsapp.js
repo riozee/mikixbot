@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 const fsp = require('fs/promises');
 const fs = require('fs');
 
-const argv = JSON.parse(process.argv[2]);
+const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
 const cache = {
     msg: [],
@@ -27,7 +27,7 @@ const {
 } = require('@adiwajshing/baileys-md');
 const pino = require('pino');
 
-const { state, saveState } = useSingleFileAuthState('./data/wa-session.json');
+const { state, saveState } = useSingleFileAuthState('./data/' + creds.wasession);
 
 function koneksikanKeWA() {
     return makeWASocket({
@@ -55,6 +55,7 @@ function mulai() {
             //if (_pesan.type === 'notify') return;
             if (pesan.key?.fromMe) return;
             if (pesan.key?.remoteJid === 'status@broadcast') return;
+            if (Date.now() - pesan.messageTimestamp * 1000 > 10000) return;
 
             const uid = pesan.key?.participant || pesan.key?.remoteJid;
             const cid = pesan.key?.remoteJid;
@@ -450,7 +451,7 @@ function ID(_ID) {
 }
 
 function log(kode, ...argumen2) {
-    if (!argv.dev) return;
+    if (!creds.dev) return;
     return console.log(
         [
             `[WHATSAPP] [LOG] menginisialisasi bot`, // 0
@@ -478,7 +479,7 @@ async function cekKoneksiInternet() {
     }
 }
 
-if (argv.watch) {
+if (creds.watch) {
     fs.watch(__filename, () => {
         log(10);
         process.exit();

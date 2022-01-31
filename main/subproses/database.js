@@ -3,8 +3,9 @@ const IPC = new utils.IPC('DB', process);
 
 const { MongoClient } = require('mongodb');
 const _ = require('lodash');
+const fs = require('fs');
 
-const argv = JSON.parse(process.argv[2]);
+const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
 const cache = [],
     idTidakAda = [];
@@ -16,7 +17,7 @@ setInterval(() => {
 }, 3600000);
 
 log(0);
-const klien = new MongoClient(argv.mongodburi);
+const klien = new MongoClient(creds.mongodburi);
 
 klien.connect().then(() => log(1));
 
@@ -24,7 +25,7 @@ async function proses(pesan) {
     log(2, pesan);
     let hasil;
     try {
-        const db = klien.db().collection(argv.dbtest ? 'test' : 'data');
+        const db = klien.db().collection(creds.dbtest ? 'test' : 'data');
         if (pesan._.hasOwnProperty('c')) {
             if (Array.isArray(pesan._.c)) {
                 for (const c of pesan._.c) {
@@ -114,7 +115,7 @@ process.on('message', (pesan) => {
 });
 
 function log(kode, ...argumen2) {
-    if (!argv.dev) return;
+    if (!creds.dev) return;
     return console.log(
         [
             `[DATABASE] [LOG] menginisialisasi`, // 0
@@ -130,7 +131,7 @@ function log(kode, ...argumen2) {
     );
 }
 
-if (argv.watch) {
+if (creds.watch) {
     require('fs').watch(__filename, () => {
         log(5);
         process.exit();

@@ -1,14 +1,15 @@
 const utils = require('../../utils');
 const IPC = new utils.IPC('TG', process);
 
-const fs = require('fs/promises');
+const fsp = require('fs/promises');
+const fs = require('fs');
 const fetch = require('node-fetch');
 const mime = require('mime-types');
 const { Telegraf } = require('telegraf');
 
-const argv = JSON.parse(process.argv[2]);
+const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
-const TOKEN = argv.tgtoken;
+const TOKEN = creds.tgtoken;
 
 log(0);
 const bot = new Telegraf(TOKEN);
@@ -278,7 +279,7 @@ async function unduhMedia(media) {
     const f = await fetch(tautan);
     const buffer = await f.buffer();
     const keluaran = `./tmp/${Date.now()}#${Math.random().toString(36).slice(2)}.${eks}`;
-    await fs.writeFile(keluaran, buffer);
+    await fsp.writeFile(keluaran, buffer);
     return keluaran;
 }
 
@@ -339,7 +340,7 @@ function bagiString(teks, besar) {
 }
 
 function log(kode, ...argumen2) {
-    if (!argv.dev) return;
+    if (!creds.dev) return;
     return console.log(
         [
             `[TELEGRAM] [LOG] menginisialisasi bot`, // 0
@@ -355,7 +356,7 @@ function log(kode, ...argumen2) {
     );
 }
 
-if (argv.watch) {
+if (creds.watch) {
     require('fs').watch(__filename, () => {
         log(7);
         process.exit();

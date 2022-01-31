@@ -1,20 +1,20 @@
 const { jalankanFn, encodePesan, decodePesan } = require('./utils');
 const fork = require('child_process').fork;
-const minimist = require('minimist');
 const fs = require('fs');
 
 if (!fs.existsSync('./tmp/')) fs.mkdirSync('./tmp/');
 
-const argv = minimist(process.argv.slice(2));
+const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
 const proses2 = {};
 
-const subproses = ['./main/subproses/database.js', './main/subproses/perintah.js', './main/subproses/timer.js'];
-if (argv.s) {
-    for (const s of argv.s.split(',')) {
-        subproses.push(`./main/subproses/bot/${s}.js`);
-    }
-}
+const subproses = [
+    './main/subproses/database.js',
+    './main/subproses/perintah.js',
+    './main/subproses/timer.js',
+    './main/subproses/bot/whatsapp.js',
+    './main/subproses/bot/telegram.js',
+];
 for (const proses of subproses) {
     mulaiProses(proses);
 }
@@ -22,7 +22,7 @@ for (const proses of subproses) {
 function mulaiProses(file) {
     log(0, file);
     logNoDev(0, file);
-    proses2[file] = fork(file, [JSON.stringify(argv)]);
+    proses2[file] = fork(file, [JSON.stringify(creds)]);
     proses2[file].on('message', (pesan) => {
         log(1, file, pesan);
         main(pesan);
@@ -74,7 +74,7 @@ function teruskanKe(subproses, pesan) {
 }
 
 function log(kode, nama, ...argumen2) {
-    if (!argv.dev) return;
+    if (!creds.dev) return;
     return console.log(
         [
             `[MAIN] [LOG] memulai subproses ${nama}`, // 0
@@ -88,7 +88,7 @@ function log(kode, nama, ...argumen2) {
 }
 
 function logNoDev(kode, nama, ...argumen2) {
-    if (argv.dev) return;
+    if (creds.dev) return;
     return console.log(
         [
             `[MAIN] [LOG] memulai subproses ${nama}`, // 0
