@@ -55,14 +55,15 @@ bot.on(['message', 'channel_post'], async (konteks) => {
         console.log(cache.cekizin[cid]);
     }
     if (cache.cekizin[cid].p === 'n') return;
-
+    const isChannel = konteks.message.chat.type === 'channel';
     let pesan = {
-        pengirim: uid == cid ? IDPengguna(uid) : IDChat(cid),
-        uid: IDPengguna(uid),
+        pengirim: isChannel ? IDChannel(cid) : uid == cid ? IDPengguna(uid) : IDChat(cid),
+        uid: isChannel ? IDChannel(cid) : IDPengguna(uid),
         mid: konteks.message.message_id,
         tg_name: konteks.message.from.username
             ? '@' + konteks.message.from.username
             : konteks.message.sender_chat?.title || [konteks.message.from.first_name, konteks.message.from.last_name].filter(Boolean).join(' '),
+        gname: uid != cid || isChannel ? konteks.message.chat.title : undefined,
     };
 
     function muatPesan(message) {
@@ -184,8 +185,10 @@ bot.on(['message', 'channel_post'], async (konteks) => {
             .forEach((v) => pesan.mentioned.push(v));
     }
     if (konteks.message.migrate_to_chat_id) {
-        pesan.migrate_from_id = konteks.message.migrate_from_chat_id;
-        pesan.migrate_to_id = konteks.message.migrate_to_chat_id;
+        pesan.migrateChatID = {
+            from: IDChat(konteks.message.migrate_from_chat_id),
+            to: IDChat(konteks.message.migrate_to_chat_id),
+        };
     }
 
     log(2, pesan);
@@ -205,20 +208,21 @@ async function kirimPesan(pesan) {
             opsi.reply_to_message_id = pesan._.mid;
         }
     }
-    if (pesan._.saran) {
-        console.log(pesan._.saran);
-        opsi.reply_markup = {
-            keyboard: pesan._.saran.map((v) => [{ text: v }]),
-            one_time_keyboard: true,
-            resize_keyboard: true,
-            selective: true,
-        };
-    } else {
-        if (!pesan._.tg_no_remove_keyboard) {
+    if (!pesan._.penerima.endsWith('#H')) {
+        if (pesan._.saran) {
             opsi.reply_markup = {
-                remove_keyboard: true,
+                keyboard: pesan._.saran.map((v) => [{ text: v }]),
+                one_time_keyboard: true,
+                resize_keyboard: true,
                 selective: true,
             };
+        } else {
+            if (!pesan._.tg_no_remove_keyboard) {
+                opsi.reply_markup = {
+                    remove_keyboard: true,
+                    selective: true,
+                };
+            }
         }
     }
 
@@ -359,7 +363,6 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// TEKS
         else {
-            await bot.telegram.sendChatAction(penerima, 'typing');
             ids = await kirimPesanTeks(penerima, $.teks, opsi);
         }
         log(5);
@@ -423,6 +426,16 @@ process.on('message', (pesan) => {
                 };
             } else if (pesan._?.delmsg) {
                 return { r: Boolean(await bot.telegram.deleteMessage(ID(pesan._.delmsg.cid), pesan._.delmsg.mid)) };
+            } else if (pesan._?.isOwner) {
+                return {
+                    owner: await (async () => {
+                        const id = ID(pesan._.isOwner.c);
+                        const uid = ID(pesan._.isOwner.u);
+                        const admins = await bot.telegram.getChatAdministrators(id);
+                        if (admins.find((v) => String(v.user.id) === uid)?.status === 'creator') return true;
+                        return false;
+                    })(),
+                };
             }
         });
     } else {
@@ -442,8 +455,12 @@ function IDPengguna(ID) {
     return 'TG#' + ID;
 }
 
+function IDChannel(ID) {
+    return 'TG#' + ID + '#H';
+}
+
 function ID(_ID) {
-    return _ID.replace(/^TG#|#C$/, '');
+    return _ID.replace(/^TG#|#H$|#C$/, '');
 }
 
 async function kirimPesanTeks(penerima, teks, opsi) {

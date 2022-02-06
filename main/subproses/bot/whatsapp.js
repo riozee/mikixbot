@@ -9,6 +9,7 @@ const creds = JSON.parse(fs.readFileSync('./creds.json'));
 const cache = {
     msg: [],
     cekizin: {},
+    namagrup: {},
     blocklist: [],
 };
 
@@ -89,6 +90,8 @@ function mulai() {
                 uid: IDPengguna(uid),
                 mid: pesan.key.id,
             };
+            if (uid !== cid && !cache.namagrup[cid]) cache.namagrup[cid] = (await bot.groupMetadata(cid)).subject;
+            $pesan.gname = cache.namagrup[cid];
 
             function muatPesan(tipe, isi) {
                 const _ = {};
@@ -256,7 +259,13 @@ function mulai() {
     bot.ev.on('creds.update', saveState);
 
     bot.ev.on('groups.update', (upd) => {
-        upd.forEach((u) => (u.announce ? (cache.cekizin[u.id] = 'n') : 0));
+        upd.forEach((u) => {
+            if (u.announce) {
+                cache.cekizin[u.id] = 'n';
+            } else if (u.subject) {
+                cache.namagrup[u.id] = u.subject;
+            }
+        });
     });
     bot.ev.on('groups.upsert', (upd) => {
         upd.forEach((u) => (u.announce ? (cache.cekizin[u.id] = 'n') : 0));
@@ -515,6 +524,17 @@ process.on('message', (pesan) => {
                 };
             } else if (pesan._?.delmsg) {
                 return { r: Boolean(await bot.sendMessage(ID(pesan._.delmsg.cid), { delete: { id: pesan._.delmsg.mid } })) };
+            } else if (pesan._?.isOwner) {
+                return {
+                    owner: await (async () => {
+                        const id = ID(pesan._.isOwner.c);
+                        const uid = ID(pesan._.isOwner.u);
+                        const gdata = await bot.groupMetadata(id);
+                        if (gdata.owner === uid) return true;
+                        if (gdata.participants.find((v) => v.id === uid)?.admin === 'superadmin') return true;
+                        return false;
+                    })(),
+                };
             }
         });
     } else {

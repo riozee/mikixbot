@@ -25,7 +25,9 @@ let RSS = [];
     });
     if (_e) throw 'dberror';
     RSS = hasil.map((v) => ({ chat: v._id, rss: v.rss }));
-})();
+})()
+    .then(() => {})
+    .catch(() => process.exit());
 
 async function tambahRSS(link, chat) {
     try {

@@ -78,11 +78,18 @@ async function proses(pesan) {
     if ($.platform === 'TG' && $.id && data.u.tg_name !== $.tg_name) {
         DB.perbarui({ _id: $.uid }, { $set: { tg_name: $.tg_name } });
     }
+    if ($.pengirim.endsWith('#C')) {
+        if (data.c) {
+            if (data.c.gname !== $.gname) {
+                DB.perbarui({ _id: $.pengirim }, { $set: { gname: $.gname } });
+            }
+        }
+    }
 
     ////////// CHAT ID MIGRATE
-    if ($.migrate_to_id) {
+    if ($.migrateChatID) {
         kirimPesan($.penerima, {
-            teks: $.TEKS('system/migratedchatid').replace('%old', $.migrate_from_id).replace('%new', $.migrate_to_id),
+            teks: $.TEKS('system/migratedchatid'),
         });
     }
     ////////// ANONYMOUS CHAT
@@ -448,11 +455,6 @@ async function anch(pesan, data) {
 }
 
 //////////////////// VALIDASI
-async function validasiGrup($, data) {
-    if (!data.c) return { teks: $.TEKS('group/notregistered') };
-    if (Date.now() > +data.c.expiration) return { teks: $.TEKS('group/expired') };
-    else return false;
-}
 
 async function validasiUser($, data) {
     let r = false;
@@ -545,13 +547,9 @@ async function perintah(pesan, data) {
     $.args = $.argumen.split(/\s+/);
 
     log(2, $.teks);
-    if ($.perintah === 'getgroupid') return kirimPesan($.pengirim, { teks: $.pengirim, re: true, mid: $.mid });
-    if ($.perintah === 'getid') return kirimPesan($.pengirim, { teks: $.id || $.TEKS('command/getid/null'), re: true, mid: $.mid });
-    if ($.perintah === 'pricing') return kirimPesan($.pengirim, { teks: $.TEKS('command/pricing'), re: true, mid: $.mid });
 
     if (Perintah.hasOwnProperty($.perintah)) {
         let r;
-        if ($.pengirim.endsWith('#C') && (r = await validasiGrup($, data))) return kirimPesan($.pengirim, r);
         if ((r = await validasiUser($, data))) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
 
         const msg = {
@@ -611,40 +609,6 @@ const Perintah = {
         fn: ($) => {
             return {
                 teks: $.TEKS('command/about'),
-            };
-        },
-    },
-    setgroupsubscription: {
-        stx: '/setgroupsubscription [id] [dur]',
-        cat: 'dev',
-        fn: async ($) => {
-            if (!cekDev($.uid)) return { teks: $.TEKS('permission/devonly') };
-            let [id, durasi] = $.argumen.split(/\s+/),
-                perpanjang = false;
-            if (!id) return { teks: $.TEKS('command/setgroupsubscription') };
-            if (durasi.startsWith('+')) {
-                perpanjang = true;
-                durasi = durasi.slice(1);
-            }
-            if (durasi.endsWith('d')) {
-                durasi = `${+durasi.slice(0, -1) * 86_400_000}`;
-            }
-            if (isNaN(+durasi)) return { teks: $.TEKS('command/setgroupsubscription') };
-            let e;
-            const cdata = (await DB.cari({ _id: id })).hasil;
-            if (cdata) e = await DB.perbarui({ _id: id }, { $set: { expiration: perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi } });
-            else e = await DB.buat({ _id: id, join: Date.now(), expiration: Date.now() + +durasi });
-            if (e._e) throw e._e;
-            kirimPesan(id, {
-                teks: $.TEKS('command/setgroupsubscription/notify').replace(
-                    '%date',
-                    new Date(perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi).toLocaleString()
-                ),
-            });
-            return {
-                teks: $.TEKS('command/setgroupsubscription/done')
-                    .replace('%id', id)
-                    .replace('%date', new Date(perpanjang ? cdata.expiration + +durasi : Date.now() + +durasi).toLocaleString()),
             };
         },
     },
@@ -866,12 +830,16 @@ const Perintah = {
     getgroupid: {
         stx: '/getGroupID',
         cat: 'bot',
-        fn: () => {},
+        fn: ($, data) => {
+            return { teks: data.c?.id || $.TEKS('permission/registeredgrouponly') };
+        },
     },
-    getid: {
-        stx: '/getID',
+    getuserid: {
+        stx: '/getUserID',
         cat: 'bot',
-        fn: () => {},
+        fn: ($) => {
+            return { teks: $.id || $.TEKS('command/getuserid/null') };
+        },
     },
     help: {
         stx: '/help',
@@ -981,7 +949,9 @@ const Perintah = {
     pricing: {
         stx: '/pricing',
         cat: 'bot',
-        fn: () => {},
+        fn: ($) => {
+            return { teks: $.TEKS('command/pricing') };
+        },
     },
     register: {
         stx: '/register [name]',
@@ -1005,6 +975,22 @@ const Perintah = {
                 throw h._e;
             }
             return { teks: $.TEKS('command/register/done').replace('%name', $.argumen).replace('%id', id).replace('%date', new Date().toLocaleString()) };
+        },
+    },
+    registergroup: {
+        stx: '/registergroup',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (data.c) return { teks: $.TEKS('command/registergroup/alreadyregistered') };
+            const id = 'G-' + Math.random().toString(36).slice(2).toUpperCase();
+            let h = await DB.buat({
+                _id: $.pengirim,
+                join: Date.now(),
+                id: id,
+            });
+            if (h._e) throw h._e;
+            return { teks: $.TEKS('command/registergroup/done').replace('%id', id).replace('%date', new Date().toLocaleString()) };
         },
     },
     reversetext: {
@@ -1047,7 +1033,8 @@ const Perintah = {
         cat: 'bot',
         fn: async ($, data) => {
             if ($.pengirim.endsWith('#C')) {
-                if (!(await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin) return { teks: $.TEKS('permission/adminonly') };
+                if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
+                if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
             } else {
                 if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
             }
@@ -2763,7 +2750,7 @@ const Perintah = {
         },
     },
     forward: {
-        stx: '/forward [acc/all]',
+        stx: '/forward [n/all]',
         cat: 'multiplatformtools',
         fn: async ($, data) => {
             if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
@@ -2777,30 +2764,29 @@ const Perintah = {
                 const rejected = res.filter((v) => v.status === 'rejected');
                 const errors = rejected.filter((v) => v.reason !== 'notsupported');
                 const notsupported = rejected.filter((v) => v.reason === 'notsupported');
+                let errId;
                 if (errors.length) {
-                    const errId = Math.random().toString(36).slice(2).toUpperCase();
+                    errId = Math.random().toString(36).slice(2).toUpperCase();
                     cache.data.errors ||= {};
                     cache.data.errors[errId] = {
                         $: $,
                         e: rejected.map((v) => v.reason?.stack ?? v.reason).join('\n=============\n'),
                         t: Date.now(),
                     };
-                    kirimPesan($.pengirim, {
-                        teks: $.TEKS('command/forward/failmany').replace('%count', rejected.length).replace('%e', errId),
-                    });
                 }
-                if (notsupported.length) {
-                    kirimPesan($.pengirim, {
-                        teks: $.TEKS('command/forward/messagenotsupportedmany').replace('%count', notsupported.length),
-                    });
-                }
-                if (fulfilled.length) return { teks: $.TEKS('command/forward/successmany').replace('%count', fulfilled.length) };
+                return {
+                    teks: $.TEKS('command/forward/done')
+                        .replace('%a', bound.length)
+                        .replace('%s', fulfilled.length)
+                        .replace('%f', errors.length ? `${errors.length} (${errId})` : '0')
+                        .replace('%n', notsupported.length),
+                };
             } else if (!isNaN((idx = parseInt($.argumen))) && idx > 0 && idx <= bound.length) {
                 try {
                     await forward(bound[idx - 1]._id);
-                    return { teks: $.TEKS('command/forward/success') };
+                    return { teks: $.TEKS('command/forward/done').replace('%a', '1').replace('%s', '1').replace('%f', '0').replace('%n', '0') };
                 } catch (e) {
-                    if (e === 'notsupported') return { teks: $.TEKS('command/forward/messagenotsupported') };
+                    if (e === 'notsupported') return { teks: $.TEKS('command/forward/done').replace('%a', '1').replace('%s', '0').replace('%f', '0').replace('%n', '1') };
                     throw e;
                 }
             } else {
@@ -2909,10 +2895,9 @@ const Perintah = {
         cat: 'bot',
         fn: async ($, data) => {
             if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
             return {
-                teks: $.TEKS('command/groupstatus')
-                    .replace('%join', new Date(data.c.join).toLocaleString())
-                    .replace('%expr', new Date(data.c.expiration).toLocaleString()),
+                teks: $.TEKS('command/groupstatus').replace('%join', new Date(data.c.join).toLocaleString()),
             };
         },
     },
@@ -3099,7 +3084,9 @@ const Perintah = {
     addrss: {
         stx: '/addRSS [link]',
         cat: 'rss',
-        fn: async ($) => {
+        fn: async ($, data) => {
+            if ($.pengirim.endsWith('#C') && !data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
+            if (!$.pengirim.endsWith('#C') && !$.id) return { teks: $.TEKS('permission/registeredonly') };
             if (!$.args[0]) return { teks: $.TEKS('command/addrss') };
             const url = $.args[0].startsWith('http') ? $.args[0] : 'https://' + $.args[0];
             try {
@@ -3145,7 +3132,199 @@ const Perintah = {
             return { teks: $.TEKS('command/deleterss/done').replace('%link', l) };
         },
     },
+    addgroup: {
+        stx: '/addgroup',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
+            if (!(await isOwner($))) return { teks: $.TEKS('permission/owneronly') };
+            const { _e } = await DB.perbarui({ _id: $.id }, { $push: { groups: data.c.id } });
+            if (_e) throw _e;
+            return { teks: $.TEKS('command/addgroup/done') };
+        },
+    },
+    grouplist: {
+        stx: '/grouplist',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!data.i.groups?.length) return { teks: $.TEKS('command/grouplist/notfound') };
+            const groups = [];
+            for (const [idx, gid] of Object.entries(data.i.groups)) {
+                groups.push(`${+idx + 1}. ${(await DB.cari({ id: gid }))?.hasil?.gname || v}`);
+            }
+            return { teks: groups.join('\n') };
+        },
+    },
+    deletegroup: {
+        stx: '/deletegroup [n]',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.args[0] || isNaN(parseInt($.args[0])) || parseInt($.args[0]) < 1 || parseInt($.args[0]) > data.i.groups?.length)
+                return { teks: $.TEKS('command/deletegroup') };
+            const idx = parseInt($.args[0]);
+            const { _e } = await DB.perbarui({ _id: $.id }, { $pull: { groups: data.i.groups[idx - 1] } });
+            if (_e) throw _e;
+            return { teks: $.TEKS('command/deletegroup/done').replace('%id', (await DB.cari({ id: data.i.groups[idx - 1] }))?.hasil?.gname || data.i.groups[idx - 1]) };
+        },
+    },
+    forwardgroup: {
+        stx: '/forwardgroup [n/all]',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.q) return { teks: $.TEKS('command/forwardgroup') };
+            if (!data.i.groups?.length) return { teks: $.TEKS('command/forwardgroup/notfound') };
+            const tujuan = [];
+            for (const gid of data.i.groups) {
+                tujuan.push((await DB.cari({ id: gid }))?.hasil?._id);
+            }
+            let idx;
+            if ($.args[0]?.toLowerCase?.() === 'all') {
+                const res = await Promise.allSettled(tujuan.map((v) => forward(v)));
+                const fulfilled = res.filter((v) => v.status === 'fulfilled');
+                const rejected = res.filter((v) => v.status === 'rejected');
+                const errors = rejected.filter((v) => v.reason !== 'notsupported');
+                const notsupported = rejected.filter((v) => v.reason === 'notsupported');
+                let errId;
+                if (errors.length) {
+                    errId = Math.random().toString(36).slice(2).toUpperCase();
+                    cache.data.errors ||= {};
+                    cache.data.errors[errId] = {
+                        $: $,
+                        e: rejected.map((v) => v.reason?.stack ?? v.reason).join('\n=============\n'),
+                        t: Date.now(),
+                    };
+                }
+                return {
+                    teks: $.TEKS('command/forwardgroup/done')
+                        .replace('%a', tujuan.length)
+                        .replace('%s', fulfilled.length)
+                        .replace('%f', errors.length ? `${errors.length} (${errId})` : '0')
+                        .replace('%n', notsupported.length),
+                };
+            } else if (!isNaN((idx = parseInt($.argumen))) && idx > 0 && idx <= tujuan.length) {
+                try {
+                    await forward(tujuan[idx - 1]);
+                    return { teks: $.TEKS('command/forwardgroup/done').replace('%a', '1').replace('%s', '1').replace('%f', '0').replace('%n', '0') };
+                } catch (e) {
+                    if (e === 'notsupported')
+                        return { teks: $.TEKS('command/forwardgroup/done').replace('%a', '1').replace('%s', '0').replace('%f', '0').replace('%n', '1') };
+                    throw e;
+                }
+            } else {
+                return { teks: $.TEKS('command/forwardgroup') };
+            }
+
+            async function forward(tujuan) {
+                const msg = {};
+                if ($.uid.startsWith('WA')) {
+                    if (tujuan.startsWith('WA')) {
+                        msg.copy = {
+                            q: $.mid,
+                        };
+                    } else if (tujuan.startsWith('TG')) {
+                        if ($.q.gambar) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.gambar });
+                            msg.gambar = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.video) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.video });
+                            msg.video = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.stiker) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.stiker });
+                            if ($.q.stiker.animasi) {
+                                const gif = await webp.keGif(file.file);
+                                msg.video = {
+                                    file: gif,
+                                    gif: true,
+                                };
+                            } else {
+                                msg.stiker = { file: file.file };
+                            }
+                        } else if ($.q.lokasi) {
+                            msg.lokasi = $.q.lokasi;
+                        } else if ($.q.audio) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.audio });
+                            msg.audio = { file: file.file };
+                        } else if ($.dokumen) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.dokumen });
+                            msg.dokumen = { file: file.file, mimetype: $.q.dokumen.mimetype, namaFile: $.q.dokumen.namaFile };
+                            msg.teks = `[[ ${$.q.dokumen.namaFile} ]]`;
+                        } else if ($.q.kontak) {
+                            msg.kontak = $.q.kontak;
+                        } else {
+                            if ($.q.teks) {
+                                msg.teks = $.q.teks;
+                            } else {
+                                throw 'notsupported';
+                            }
+                        }
+                    }
+                } else if ($.uid.startsWith('TG')) {
+                    if (tujuan.startsWith('TG')) {
+                        msg.copy = {
+                            from: $.uid,
+                            mid: $.q.mid,
+                        };
+                    } else if (tujuan.startsWith('WA')) {
+                        if ($.q.gambar) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.gambar });
+                            msg.gambar = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.video) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.video });
+                            msg.video = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.stiker) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.stiker });
+                            msg.stiker = { file: file.file };
+                        } else if ($.q.lokasi) {
+                            msg.lokasi = $.q.lokasi;
+                        } else if ($.q.audio) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.audio });
+                            msg.audio = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.dokumen) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.dokumen });
+                            msg.dokumen = {
+                                file: file.file,
+                                mimetype: $.q.dokumen.mimetype,
+                                namaFile: $.q.dokumen.namaFile,
+                            };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.kontak) {
+                            msg.kontak = $.q.kontak;
+                        } else {
+                            if ($.q.teks) {
+                                msg.teks = $.q.teks;
+                            } else {
+                                throw 'notsupported';
+                            }
+                        }
+                    }
+                }
+
+                const { s, _e } = await _kirimPesan(tujuan, msg);
+                if (s === false) {
+                    throw _e;
+                }
+            }
+        },
+    },
 };
+
+async function isAdmin($) {
+    return (await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin;
+}
+
+async function isOwner($) {
+    return (await IPC.kirimKueri($.platform, { isOwner: { c: $.pengirim, u: $.uid } })).owner;
+}
 
 function saveFetchByStream(res, ext, maxSize) {
     return new Promise((resolve, reject) => {
