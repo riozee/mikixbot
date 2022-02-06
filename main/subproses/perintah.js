@@ -35,23 +35,58 @@ setInterval(() => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.dat
 
 //////////////////// UTAMA
 
+async function rss(rss) {
+    if (rss.items) {
+        await Promise.allSettled(
+            rss.items.map((v) =>
+                kirimPesan(rss.c, {
+                    gambar: v.image ? { url: v.image } : undefined,
+                    teks: `RSS Feed 📰 | ${v.title}${v.desc ? '\n\n' + v.desc : ''}\n\n${v.link}`,
+                })
+            )
+        );
+    } else if (rss.fail) {
+        const errId = Math.random().toString(36).slice(2).toUpperCase();
+        cache.data.errors ||= {};
+        cache.data.errors[errId] = {
+            $: $,
+            e: rss.fail.reason,
+            t: Date.now(),
+        };
+        kirimPesan(rss.c, {
+            teks: TEKS['en']['rss/fail'].replace('%link', rss.fail.link).replace('%err', errId),
+        });
+    }
+}
+
 async function proses(pesan) {
     log(1, pesan);
     logPesan(pesan.d, pesan._);
     const c = (await DB.cari({ _id: pesan._.pengirim })).hasil;
+    const u = pesan._.pengirim !== pesan._.uid ? (await DB.cari({ _id: pesan._.uid })).hasil : c;
     const data = {
         c: c,
-        u: pesan._.pengirim !== pesan._.uid ? (await DB.cari({ _id: pesan._.uid })).hasil : c,
+        u: u,
+        i: u?.bindto ? (await DB.cari({ _id: u?.bindto })).hasil : null,
     };
 
     const $ = pesan._;
     $.platform = pesan.d;
-    $.bahasa = data.c?.lang || 'en';
-
+    $.bahasa = data.c?.lang || data.i?.lang || 'id';
     $.TEKS = (teks) => TEKS[$.bahasa][teks];
+    $.id = data.i ? data.i._id : null;
+    if ($.platform === 'TG' && $.id && data.u.tg_name !== $.tg_name) {
+        DB.perbarui({ _id: $.uid }, { $set: { tg_name: $.tg_name } });
+    }
 
+    ////////// CHAT ID MIGRATE
+    if ($.migrate_to_id) {
+        kirimPesan($.penerima, {
+            teks: $.TEKS('system/migratedchatid').replace('%old', $.migrate_from_id).replace('%new', $.migrate_to_id),
+        });
+    }
     ////////// ANONYMOUS CHAT
-    if (!$.pengirim.endsWith('#C') && cache.data.anch?.active?.includes?.($.uid)) {
+    else if (!$.pengirim.endsWith('#C') && cache.data.anch?.active?.includes?.($.uid)) {
         anch(pesan, data);
     }
     ////////// INPUT
@@ -63,9 +98,65 @@ async function proses(pesan) {
         perintah(pesan, data);
     }
 
+    ////////// BIND
+    else if (!$.pengirim.endsWith('#C') && $.teks && $.teks.startsWith('bind:code=') && /^bind:code=[a-z0-9]+$/.test($.teks)) {
+        bind($, data);
+    }
+
     ////////// SIMSIMI
     else if ((cache.data.simsimi ||= {})[$.pengirim]) {
         simsimi($, data);
+    }
+}
+
+async function bind($, data) {
+    for (const b of (cache.data.binds ||= [])) {
+        if (Date.now() - b.time > 60000) {
+            _.remove(cache.data.binds, { code: b.code });
+            continue;
+        }
+        if (b.code === $.teks) {
+            try {
+                if ($.id) {
+                    if (b.force) {
+                        let h = await DB.perbarui({ _id: $.uid }, { $set: { bindto: b.id } });
+                        if (h._e) throw h._e;
+                        if ((await DB.cari({ bindto: $.id }, true)).hasil.filter((v) => v._id !== $.uid).length === 0) {
+                            await DB.hapus({ _id: $.id });
+                        }
+                        return kirimPesan(b.uid, {
+                            teks: $.TEKS('command/bind/success'),
+                        });
+                    } else {
+                        cache.data.binds.splice(_.findIndex(cache.data.binds, { code: b.code }), 1);
+                        return kirimPesan(b.uid, {
+                            teks: $.TEKS('command/bind/fail'),
+                        });
+                    }
+                } else {
+                    let h = await DB.buat({
+                        _id: $.uid,
+                        bindto: b.id,
+                    });
+                    if (h._e) throw h._e;
+                    return kirimPesan(b.uid, {
+                        teks: $.TEKS('command/bind/success'),
+                    });
+                }
+            } catch (e) {
+                console.log(e);
+                const errId = Math.random().toString(36).slice(2).toUpperCase();
+                cache.data.errors ||= {};
+                cache.data.errors[errId] = {
+                    $: $,
+                    e: e?.stack ?? e,
+                    t: Date.now(),
+                };
+                kirimPesan(b.uid, {
+                    teks: $.TEKS('system/error').replace('%e', errId),
+                });
+            }
+        } else continue;
     }
 }
 
@@ -91,6 +182,7 @@ async function simsimi($, data) {
                         teks: res.result,
                         re: true,
                         mid: $.mid,
+                        tg_no_remove_keyboard: true,
                     }).then((v) => resolve(v));
                 }, _.random(0, 5000));
             });
@@ -107,6 +199,7 @@ async function simsimi($, data) {
                 teks: $.TEKS('command/simsimi/error').replace('%err', errId),
                 re: true,
                 mid: $.mid,
+                tg_no_remove_keyboard: true,
             });
         }
     }
@@ -194,7 +287,7 @@ async function anch(pesan, data) {
             if (cmd === 'anext') {
                 delete cache.data.anch.room[roomID];
                 _.pull(cache.data.anch.active, $.uid, partner);
-                kirimPesan(partner, { teks: $.TEKS('anonymouschat/partnerstoppeddialog') });
+                kirimPesan(partner, { teks: $.TEKS('anonymouschat/partnerstoppeddialog'), saran: ['/asearch'] });
                 if (cache.data.anch.ready?.length) {
                     const partnerID = _.sample(cache.data.anch.ready);
                     _.pull(cache.data.anch.ready, partnerID);
@@ -211,12 +304,12 @@ async function anch(pesan, data) {
                         [partnerID]: $.uid,
                     };
                     cache.data.anch.active.push($.uid, partnerID);
-                    kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound') });
-                    kirimPesan($.uid, { teks: $.TEKS('anonymouschat/partnerfound') });
+                    kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] });
+                    kirimPesan($.uid, { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] });
                 } else {
                     if (!cache.data.anch.ready) cache.data.anch.ready = [];
                     cache.data.anch.ready.push($.uid);
-                    kirimPesan($.uid, { teks: $.TEKS('anonymouschat/findingpartner') });
+                    kirimPesan($.uid, { teks: $.TEKS('anonymouschat/findingpartner'), saran: ['/astop'] });
                 }
                 return;
             } else if (cmd === 'astop') {
@@ -229,8 +322,8 @@ async function anch(pesan, data) {
                         },
                     });
                 }
-                kirimPesan($.uid, { teks: $.TEKS('anonymouschat/stoppingdialog') });
-                kirimPesan(partner, { teks: $.TEKS('anonymouschat/partnerstoppeddialog') });
+                kirimPesan($.uid, { teks: $.TEKS('anonymouschat/stoppingdialog'), saran: ['/asearch'] });
+                kirimPesan(partner, { teks: $.TEKS('anonymouschat/partnerstoppeddialog'), saran: ['/asearch'] });
                 return;
             }
         }
@@ -240,6 +333,7 @@ async function anch(pesan, data) {
                 roomID: roomID,
             },
             re: $.q ? room.chat.filter((v) => v.includes($.q.mid))[0]?.filter?.((v) => v !== $.q.mid)?.[0] : undefined,
+            tg_no_remove_keyboard: true,
         };
 
         ////////////////////
@@ -344,7 +438,10 @@ async function anch(pesan, data) {
                 room.chat.push([$.mid, terkirim.mid]);
             }
         } else {
-            kirimPesan($.uid, $.TEKS('anonymouschat/sendingfailed'));
+            kirimPesan($.uid, {
+                teks: $.TEKS('anonymouschat/sendingfailed'),
+                tg_no_remove_keyboard: true,
+            });
         }
         break;
     }
@@ -362,14 +459,14 @@ async function validasiUser($, data) {
     if (!cache.data.cdcmd) cache.data.cdcmd = {};
     const cdcmd = cache.data.cdcmd;
     if (!cdcmd[$.uid]) cdcmd[$.uid] = 0;
-    if (!data.u || data.u.premlvl === 0 || Date.now() > data.u.expiration) {
+    if (!data.i || data.i.premlvl === 0 || Date.now() > data.i.expiration) {
         // FREE USER
         if (Date.now() - cdcmd[$.uid] < 5000) r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5') };
     } else {
-        if (data.u.premlvl === 1) {
+        if (data.i.premlvl === 1) {
             // PREMIUM LITE
             if (Date.now() - cdcmd[$.uid] < 1500) r = { teks: $.TEKS('user/cdcommandreached').replace('%lvl', 'Premium Lite').replace('%dur', '1.5') };
-        } else if (data.u.premlvl === 2) {
+        } else if (data.i.premlvl === 2) {
             // PREMIUM XTREME
         }
     }
@@ -386,11 +483,11 @@ function cekLimit($, data) {
     const usrlimit = cache.data.usrlimit;
     if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
     return {
-        val: cekPremium($, data) ? Infinity : usrlimit[$.uid] ?? (usrlimit[$.uid] = 1),
+        val: cekPremium($, data) ? Infinity : usrlimit[$.id] ?? (usrlimit[$.id] = 1),
         kurangi: () => {
-            if (data.u?.premlvl === 0 && usrlimit[$.uid] > 0) {
-                usrlimit[$.uid] -= 1;
-                return kirimPesan($.pengirim, { teks: $.TEKS('user/limitnotice').replace('%lim', usrlimit[$.uid]), re: true, mid: $.mid });
+            if (!data.i?.premlvl && usrlimit[$.id || $.uid] > 0) {
+                usrlimit[$.id || $.uid] -= 1;
+                return kirimPesan($.pengirim, { teks: $.TEKS('user/limitnotice').replace('%lim', usrlimit[$.id || $.uid]), re: true, mid: $.mid });
             }
         },
         habis: { teks: $.TEKS('user/limitreached') },
@@ -415,14 +512,22 @@ function cekWaiter($) {
         hapus: () => delete cache.data.waiter[$.uid],
         notice: (cmd, d) => ({
             teks: $.TEKS('user/dialognotice').replace('%cmd', cmd).replace('%d', d),
+            tg_no_remove_keyboard: true,
         }),
+        belum: (pesan) => ({
+            ...pesan,
+            tg_no_remove_keyboard: true,
+        }),
+        selesai: (pesan) => {
+            delete cache.data.waiter[$.uid];
+            return pesan;
+        },
     };
 }
 
 function cekPremium($, data) {
-    if (data.u?.premlvl) {
-        console.log(true);
-        if (data.u.expiration > Date.now()) return true;
+    if (data.i?.premlvl) {
+        if (data.i.expiration > Date.now()) return true;
         return false;
     }
     return false;
@@ -440,8 +545,8 @@ async function perintah(pesan, data) {
     $.args = $.argumen.split(/\s+/);
 
     log(2, $.teks);
-    if ($.perintah === 'getid') return kirimPesan($.pengirim, { teks: $.pengirim, re: true, mid: $.mid });
-    if ($.perintah === 'getuid') return kirimPesan($.pengirim, { teks: $.uid, re: true, mid: $.mid });
+    if ($.perintah === 'getgroupid') return kirimPesan($.pengirim, { teks: $.pengirim, re: true, mid: $.mid });
+    if ($.perintah === 'getid') return kirimPesan($.pengirim, { teks: $.id || $.TEKS('command/getid/null'), re: true, mid: $.mid });
     if ($.perintah === 'pricing') return kirimPesan($.pengirim, { teks: $.TEKS('command/pricing'), re: true, mid: $.mid });
 
     if (Perintah.hasOwnProperty($.perintah)) {
@@ -566,13 +671,13 @@ const Perintah = {
                 };
                 if (!cache.data.anch.active) cache.data.anch.active = [];
                 cache.data.anch.active.push($.uid, partnerID);
-                kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound') });
-                return { teks: $.TEKS('anonymouschat/partnerfound') };
+                kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] });
+                return { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] };
             } else {
                 if (!cache.data.anch) cache.data.anch = {};
                 if (!cache.data.anch.ready) cache.data.anch.ready = [];
                 cache.data.anch.ready.push($.uid);
-                return { teks: $.TEKS('anonymouschat/findingpartner') };
+                return { teks: $.TEKS('anonymouschat/findingpartner'), saran: ['/astop'] };
             }
         },
     },
@@ -642,36 +747,34 @@ const Perintah = {
         },
     },
     asahotak: {
-        stx: '/asahotak (Indonesia)',
+        stx: '/asahotak',
         cat: 'games',
+        lang: ['id'],
         fn: async ($, data, { gamename, gamelink } = {}) => {
             const waiter = cekWaiter($);
             if (waiter.val) return waiter.tolak();
             cache.data[gamename || 'asahotak'] ||= await fetchJSON(gamelink || 'https://raw.githubusercontent.com/Veanyxz/json/main/game/asahotak.json');
-            const soal = _.sample(cache.data.asahotak);
+            const soal = _.sample(cache.data[gamename || 'asahotak']);
             waiter.tambahkan($.pengirim, ['asahotak'], {
                 jawaban: soal.jawaban.trim().toLowerCase(),
-                retries: 5,
+                retries: 3,
                 gamename: gamename,
                 _sessionName: gamename,
             });
-            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal), saran: ['/cancel'] };
         },
         hd: (waiter, $) => {
             if ($.teks) {
                 if ($.perintah === 'cancel') {
-                    waiter.hapus();
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban) };
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban) });
                 }
                 if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
-                    waiter.hapus();
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban) };
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban) });
                 } else {
                     if (--waiter.val.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) };
+                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) });
                     } else {
-                        waiter.hapus();
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban) };
+                        return waiter.selesai({ teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban) });
                     }
                 }
             } else {
@@ -680,8 +783,9 @@ const Perintah = {
         },
     },
     caklontong: {
-        stx: '/caklontong (Indonesia)',
+        stx: '/caklontong ',
         cat: 'games',
+        lang: ['id'],
         fn: async ($) => {
             const waiter = cekWaiter($);
             if (waiter.val) return waiter.tolak();
@@ -690,25 +794,22 @@ const Perintah = {
             waiter.tambahkan($.pengirim, ['caklontong'], {
                 jawaban: soal.jawaban.trim().toLowerCase(),
                 deskripsi: soal.deskripsi,
-                retries: 5,
+                retries: 3,
             });
-            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal) };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', soal.soal), saran: ['/cancel'] };
         },
         hd: (waiter, $) => {
             if ($.teks) {
                 if ($.perintah === 'cancel') {
-                    waiter.hapus();
-                    return { teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) };
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) });
                 }
                 if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
-                    waiter.hapus();
-                    return { teks: $.TEKS('command/$gamequestion/correct').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) };
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/correct').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) });
                 } else {
                     if (--waiter.val.retries > 0) {
-                        return { teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) };
+                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) });
                     } else {
-                        waiter.hapus();
-                        return { teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) };
+                        return waiter.selesai({ teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) });
                     }
                 }
             } else {
@@ -717,15 +818,17 @@ const Perintah = {
         },
     },
     siapakahaku: {
-        stx: '/siapakahaku (Indonesia)',
+        stx: '/siapakahaku',
         cat: 'games',
+        lang: ['id'],
         fn: async ($) => {
             return await Perintah.asahotak.fn($, {}, { gamename: 'siapakahaku', gamelink: 'https://raw.githubusercontent.com/Veanyxz/json/main/game/siapakahaku.json' });
         },
     },
     susunkata: {
-        stx: '/susunkata (Indonesia)',
+        stx: '/susunkata',
         cat: 'games',
+        lang: ['id'],
         fn: async ($) => {
             const waiter = cekWaiter($);
             if (waiter.val) return waiter.tolak();
@@ -733,23 +836,25 @@ const Perintah = {
             const soal = _.sample(cache.data.susunkata);
             waiter.tambahkan($.pengirim, ['asahotak'], {
                 jawaban: soal.jawaban.trim().toLowerCase(),
-                retries: 5,
+                retries: 3,
                 gamename: 'susunkata',
                 _sessionName: 'susunkata',
             });
-            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', `${soal.soal} (${soal.tipe})`) };
+            return { teks: $.TEKS('command/$gamequestion/start').replace('%q', `${soal.soal} (${soal.tipe})`), saran: ['/cancel'] };
         },
     },
     tebaklirik: {
-        stx: '/tebaklirik (Indonesia)',
+        stx: '/tebaklirik',
         cat: 'games',
+        lang: ['id'],
         fn: async ($) => {
             return await Perintah.asahotak.fn($, {}, { gamename: 'tebaklirik', gamelink: 'https://raw.githubusercontent.com/Veanyxz/json/main/game/tebaklirik.json' });
         },
     },
     tebaktebakan: {
-        stx: '/tebaktebakan (Indonesia)',
+        stx: '/tebaktebakan',
         cat: 'games',
+        lang: ['id'],
         fn: async ($) => {
             return await Perintah.asahotak.fn(
                 $,
@@ -758,13 +863,13 @@ const Perintah = {
             );
         },
     },
-    getid: {
-        stx: '/getid',
+    getgroupid: {
+        stx: '/getGroupID',
         cat: 'bot',
         fn: () => {},
     },
-    getuid: {
-        stx: '/getuid',
+    getid: {
+        stx: '/getID',
         cat: 'bot',
         fn: () => {},
     },
@@ -774,9 +879,16 @@ const Perintah = {
         aliasfor: 'menu',
         fn: ($) => Perintah.menu.fn($),
     },
+    start: {
+        stx: '/start',
+        cat: 'bot',
+        aliasfor: 'menu',
+        fn: ($) => Perintah.menu.fn($),
+    },
     kbbi: {
-        stx: '/KBBI [q] (Indonesia)',
+        stx: '/KBBI [q]',
         cat: 'searchengine',
+        lang: ['id'],
         fn: async ($) => {
             if (!$.arg) return { teks: $.TEKS('command/kbbi') };
             try {
@@ -862,7 +974,7 @@ const Perintah = {
         cat: 'bot',
         fn: ($) => {
             return {
-                teks: $.TEKS('command/menu').replace('%', listPerintah($.TEKS('command/menu/$categories'), Perintah).teks),
+                teks: $.TEKS('command/menu').replace('%', listPerintah($.TEKS('command/menu/$categories'), Perintah, $.bahasa).teks),
             };
         },
     },
@@ -875,15 +987,24 @@ const Perintah = {
         stx: '/register [name]',
         cat: 'bot',
         fn: async ($, data) => {
-            if (data.u) return { teks: $.TEKS('command/register/alreadyregistered') };
+            if ($.id) return { teks: $.TEKS('command/register/alreadyregistered') };
             if (!$.argumen || $.argumen.length > 25) return { teks: $.TEKS('command/register') };
-            const { _e } = await DB.buat({
-                _id: $.uid,
+            const id = 'U-' + Math.random().toString(36).slice(2).toUpperCase();
+            let h = await DB.buat({
+                _id: id,
                 join: Date.now(),
                 name: $.argumen,
             });
-            if (_e) throw _e;
-            return { teks: $.TEKS('command/register/done').replace('%name', $.argumen).replace('%id', $.uid).replace('%date', new Date().toString()) };
+            if (h._e) throw h._e;
+            h = await DB.buat({
+                _id: $.uid,
+                bindto: id,
+            });
+            if (h._e) {
+                await DB.hapus({ _id: id });
+                throw h._e;
+            }
+            return { teks: $.TEKS('command/register/done').replace('%name', $.argumen).replace('%id', id).replace('%date', new Date().toLocaleString()) };
         },
     },
     reversetext: {
@@ -909,47 +1030,34 @@ const Perintah = {
                 teks: $.arg,
             };
         },
-    }, //
-    set: {
-        stx: '/set >>',
+    },
+    setname: {
+        stx: '/setname [name]',
         cat: 'bot',
         fn: async ($, data) => {
-            if (!data.u) return { teks: $.TEKS('permission/registeredonly') };
-
-            if (!$.argumen) return listPerintah($.TEKS('command/set/$categories'), Perintah.set._);
-            const setting = $.args[0].toLowerCase();
-            if (Perintah.set._.hasOwnProperty(setting)) {
-                $._argumen = $.argumen.replace(new RegExp(`^${_.escapeRegExp($.args[0])}\\s*`), '');
-                return await Perintah.set._[setting].fn($, data);
-            } else return listPerintah($.TEKS('command/set/$categories'), Perintah.set._);
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.argumen || $.argumen.length > 25) return { teks: $.TEKS('command/setname') };
+            const { _e } = await DB.perbarui({ _id: $.id }, { $set: { name: $.argumen } });
+            if (_e) throw _e;
+            return { teks: $.TEKS('command/setname/done').replace('%old', data.i.name).replace('%new', $.argumen) };
         },
-        _: {
-            lang: {
-                stx: '/set lang [lc]',
-                cat: 'userinterface',
-                fn: async ($) => {
-                    if ($.pengirim.endsWith('#C')) {
-                        if (!(await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin) return { teks: $.TEKS('permission/adminonly') };
-                    }
-                    const langs = Object.keys(TEKS);
-                    if (!$.args[1]) return { teks: $.TEKS('command/set/lang') };
-                    $.args[1] = $.args[1].toLowerCase();
-                    if (!langs.includes($.args[1])) return { teks: $.TEKS('command/set/lang') };
-                    const { _e } = await DB.perbarui({ _id: $.pengirim.endsWith('#C') ? $.pengirim : $.uid }, { $set: { lang: $.args[1] } });
-                    if (_e) throw _e;
-                    return { teks: TEKS[$.args[1]]['command/set/lang/done'].replace('%lang', $.args[1]) };
-                },
-            },
-            name: {
-                stx: '/set name [name]',
-                cat: 'userdata',
-                fn: async ($, data) => {
-                    if (!$._argumen || $._argumen.length > 25) return { teks: $.TEKS('command/set/name') };
-                    const { _e } = await DB.perbarui({ _id: $.uid }, { $set: { name: $._argumen } });
-                    if (_e) throw _e;
-                    return { teks: $.TEKS('command/set/name/done').replace('%old', data.u.name).replace('%new', $._argumen) };
-                },
-            },
+    },
+    setlanguage: {
+        stx: '/setlanguage [lc]',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if ($.pengirim.endsWith('#C')) {
+                if (!(await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin) return { teks: $.TEKS('permission/adminonly') };
+            } else {
+                if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            }
+            const langs = Object.keys(TEKS);
+            if (!$.args[0]) return { teks: $.TEKS('command/setlanguage') };
+            $.args[0] = $.args[0].toLowerCase();
+            if (!langs.includes($.args[0])) return { teks: $.TEKS('command/command/setlanguage') };
+            const { _e } = await DB.perbarui({ _id: $.pengirim.endsWith('#C') ? $.pengirim : $.id }, { $set: { lang: $.args[0] } });
+            if (_e) throw _e;
+            return { teks: TEKS[$.args[0]]['command/setlanguage/done'].replace('%lang', $.args[0]) };
         },
     },
     setpremiumuser: {
@@ -972,7 +1080,7 @@ const Perintah = {
             const udata = (await DB.cari({ _id: id })).hasil;
             let e;
             if (udata) e = await DB.perbarui({ _id: id }, { $set: { premlvl: +level, expiration: perpanjang ? udata.expiration + +durasi : Date.now() + +durasi } });
-            else if (+level) e = await DB.buat({ _id: id, premlvl: +level, expiration: Date.now() + +durasi });
+            else return { teks: $.TEKS('command/setpremiumuser/notfound') };
             if (e._e) throw e._e;
             const namaLvl = ['Free User', 'Premium Lite', 'Premium Xtreme'][+level];
             if (+level)
@@ -1177,8 +1285,9 @@ const Perintah = {
         },
     },
     jadwaltv: {
-        stx: '/jadwaltv [channel] (Indonesia)',
+        stx: '/jadwaltv [channel]',
         cat: 'information',
+        lang: ['id'],
         fn: async ($) => {
             if (!$.args[0]) return { teks: $.TEKS('command/jadwaltv') };
             $.args[0] = $.args[0].toLowerCase();
@@ -1194,8 +1303,9 @@ const Perintah = {
         },
     },
     acaratv: {
-        stx: '/acaratv (Indonesia)',
+        stx: '/acaratv',
         cat: 'information',
+        lang: ['id'],
         fn: async ($, data) => {
             const res = await (await lolHumanAPI('jadwaltv/now')).json();
             if (res.status != 200) throw res.message;
@@ -1241,8 +1351,9 @@ const Perintah = {
         },
     },
     cerpen: {
-        stx: '/cerpen (Indonesia)',
+        stx: '/cerpen',
         cat: 'fun',
+        lang: ['id'],
         fn: async ($, data) => {
             const res = await (await lolHumanAPI('cerpen')).json();
             if (res.status != 200) throw res.message;
@@ -1252,8 +1363,9 @@ const Perintah = {
         },
     },
     pantun: {
-        stx: '/pantun (Indonesia)',
+        stx: '/pantun',
         cat: 'fun',
+        lang: ['id'],
         fn: async ($, data) => {
             const res = await (await lolHumanAPI('random/pantun')).json();
             if (res.status != 200) throw res.message;
@@ -1263,8 +1375,9 @@ const Perintah = {
         },
     },
     puisi: {
-        stx: '/puisi (Indonesia)',
+        stx: '/puisi',
         cat: 'fun',
+        lang: ['id'],
         fn: async ($, data) => {
             const res = await (await lolHumanAPI('random/puisi')).json();
             if (res.status != 200) throw res.message;
@@ -1274,8 +1387,9 @@ const Perintah = {
         },
     },
     faktaunik: {
-        stx: '/faktaunik (Indonesia)',
+        stx: '/faktaunik',
         cat: 'fun',
+        lang: ['id'],
         fn: async ($, data) => {
             const res = await (await lolHumanAPI('random/faktaunik')).json();
             if (res.status != 200) throw res.message;
@@ -1285,8 +1399,9 @@ const Perintah = {
         },
     },
     ceritahoror: {
-        stx: '/ceritahoror (Indonesia)',
+        stx: '/ceritahoror',
         cat: 'fun',
+        lang: ['id'],
         fn: async ($, data) => {
             const res = await (await lolHumanAPI('ceritahoror')).json();
             if (res.status != 200) throw res.message;
@@ -1338,8 +1453,9 @@ const Perintah = {
         },
     },
     katabijak: {
-        stx: '/katabijak [q] (Indonesia)',
+        stx: '/katabijak [q]',
         cat: 'searchengine',
+        lang: ['id'],
         fn: async ($) => {
             if (!$.argumen) return { teks: $.TEKS('command/katabijak') };
             let res = await (await lolHumanAPI('searchbijak', 'query=' + encodeURI($.argumen))).json();
@@ -1482,7 +1598,7 @@ const Perintah = {
             const f = await lolHumanAPI(endpoint || 'random2/feed');
             if (f.status != 200) throw `${res.status} ${endpoint}`;
             if (f.headers.get('content-type') === 'image/gif') {
-                const { file } = await saveFetchByStream(f, 'gif');
+                let { file } = await saveFetchByStream(f, 'gif');
                 if ($.platform === 'WA') {
                     file = await gif.keMp4(file);
                     return {
@@ -1515,7 +1631,7 @@ const Perintah = {
             }
             if (f.status != 200) throw `${f.status} ${e}`;
             if (f.headers.get('content-type') === 'image/gif') {
-                const { file } = await saveFetchByStream(f, 'gif');
+                let { file } = await saveFetchByStream(f, 'gif');
                 if ($.platform === 'WA') {
                     file = await gif.keMp4(file);
                     return {
@@ -1832,8 +1948,9 @@ const Perintah = {
         },
     },
     otakudesu: {
-        stx: '/otakudesu [q/url] (Indonesia)',
+        stx: '/otakudesu [q/url]',
         cat: 'searchengine',
+        lang: ['id'],
         lim: true,
         fn: async ($, data) => {
             const limit = cekLimit($, data);
@@ -1881,8 +1998,9 @@ const Perintah = {
         },
     },
     kusonime: {
-        stx: '/kusonime [q/url] (Indonesia)',
+        stx: '/kusonime [q/url]',
         cat: 'searchengine',
+        lang: ['id'],
         lim: true,
         fn: async ($, data) => {
             const limit = cekLimit($, data);
@@ -1925,8 +2043,9 @@ const Perintah = {
         },
     },
     lk21: {
-        stx: '/lk21 [q] (Indonesia)',
+        stx: '/lk21 [q]',
         cat: 'searchengine',
+        lang: ['id'],
         lim: true,
         fn: async ($, data) => {
             const limit = cekLimit($, data);
@@ -2049,28 +2168,27 @@ const Perintah = {
                             .map((v) => `/${v} => ${v.toUpperCase()}`)
                             .join('\n')
                     ),
+                saran: ['/cancel', ...Object.keys(reso).map((v) => `/${v}`)],
             };
         },
         hd: async (waiter, $, data) => {
             if ($.perintah === 'cancel') {
-                waiter.hapus();
-                return { teks: $.TEKS('user/dialogcancelled').replace('%d', 'twittervideo') };
+                return waiter.selesai({ teks: $.TEKS('user/dialogcancelled').replace('%d', 'twittervideo') });
             } else {
                 let link;
                 if ((link = waiter.val[$.perintah])) {
                     const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
                         ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
                     const { file, size } = await saveFetchByStream(await fetch(link), 'mp4', ukuranDokumenMaksimal);
-                    waiter.hapus();
                     if (size < ukuranVideoMaksimal)
-                        return {
+                        return waiter.selesai({
                             video: { file: file },
                             _limit: cekLimit($, data),
-                        };
-                    return {
+                        });
+                    return waiter.selesai({
                         dokumen: { file: file, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
                         _limit: cekLimit($, data),
-                    };
+                    });
                 } else {
                     return waiter.notice('/cancel', 'twittervideo');
                 }
@@ -2119,6 +2237,7 @@ const Perintah = {
                 waiter.tambahkan($.pengirim, ['instagramdl'], { medias: res.result });
                 return {
                     teks: $.TEKS('command/instagramdl/result').replace('%count', res.result.length),
+                    saran: ['/all', '/cancel'],
                 };
             } else {
                 throw 'nolink';
@@ -2126,8 +2245,7 @@ const Perintah = {
         },
         hd: async (waiter, $, data) => {
             if ($.perintah === 'cancel') {
-                waiter.hapus();
-                return { teks: $.TEKS('user/dialogcancelled').replace('%d', 'instagramdl') };
+                return waiter.selesai({ teks: $.TEKS('user/dialogcancelled').replace('%d', 'instagramdl') });
             } else if ($.perintah === 'all') {
                 Promise.allSettled(
                     waiter.val.medias.map(
@@ -2195,23 +2313,21 @@ const Perintah = {
                     const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
                         ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
                     const { file, size } = await saveFetchByStream(f, 'mp4', ukuranDokumenMaksimal);
-                    waiter.hapus();
                     if (size < ukuranVideoMaksimal)
-                        return {
+                        return waiter.selesai({
                             video: { file: file },
                             _limit: cekLimit($, data),
-                        };
-                    return {
+                        });
+                    return waiter.selesai({
                         dokumen: { file: file, mimetype: 'video/mp4', namaFile: res.result.title + '.mp4' },
                         _limit: cekLimit($, data),
-                    };
+                    });
                 } else if (['image/jpeg', 'image/png'].includes(f.headers.get('content-type'))) {
                     const { file } = await saveFetchByStream(f, 'jpg');
-                    waiter.hapus();
-                    return {
+                    return waiter.selesai({
                         gambar: { file: file },
                         _limit: cekLimit($, data),
-                    };
+                    });
                 } else {
                     waiter.hapus();
                     throw 'nomedia';
@@ -2343,7 +2459,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/zippysharedl') };
+            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestimage') };
             const res = await (await lolHumanAPI('pinterestdl', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = Object.entries(res.result).sort((a, b) => b[0] - a[0])[0][1];
@@ -2504,27 +2620,29 @@ const Perintah = {
         },
     },
     simsimi: {
-        stx: '/simsimi (Indonesia)',
+        stx: '/simsimi',
         cat: 'fun',
+        lang: ['id'],
         lim: true,
         fn: ($, data) => {
             if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
             cache.data.simsimi ||= {};
             if (cache.data.simsimi[$.pengirim]) {
                 delete cache.data.simsimi[$.pengirim];
-                return { teks: $.TEKS('command/simsimi/off') };
+                return { teks: $.TEKS('command/simsimi/off'), saran: ['/simsimi'] };
             } else {
                 cache.data.simsimi[$.pengirim] = {
                     initiator: $.uid,
-                    expiration: data.u.expiration,
+                    expiration: data.i.expiration,
                 };
-                return { teks: $.TEKS('command/simsimi/on') };
+                return { teks: $.TEKS('command/simsimi/on'), saran: ['/simsimi'] };
             }
         },
     },
     berita: {
-        stx: '/berita (Indonesia)',
+        stx: '/berita',
         cat: 'information',
+        lang: ['id'],
         fn: async () => {
             const res = await (await lolHumanAPI('newsinfo')).json();
             if (res.status != 200) throw res.message;
@@ -2537,15 +2655,497 @@ const Perintah = {
         },
     },
     '1cak': {
-        stx: '/1cak (Indonesia)',
+        stx: '/1cak',
         cat: 'fun',
+        lang: ['id'],
         fn: async ($, data) => {
             return await Perintah.bts.fn($, data, { endpoint: 'onecak' });
         },
     },
-};
+    myprofile: {
+        stx: '/myprofile',
+        cat: 'bot',
+        fn: async ($, data) => {
+            return {
+                teks: $.TEKS('command/myprofile')
+                    .replace('%name', data.i?.name || $.TEKS('command/myprofile/unregistered'))
+                    .replace('%id', $.id || $.TEKS('command/myprofile/unregistered'))
+                    .replace('%reg', data.i?.join ? new Date(data.i.join).toLocaleString() : $.TEKS('command/myprofile/unregistered'))
+                    .replace('%premstats', ['Free user', 'Premium Lite', 'Premium Xtreme'][data.i?.premlvl || 0] || $.TEKS('command/myprofile/unregistered'))
+                    .replace('%expire', data.i?.expiration ? new Date(data.i.expiration).toLocaleString() : '-')
+                    .replace('%count', $.id ? (await DB.cari({ bindto: $.id }, true)).hasil?.length - 1 || '-' : '-'),
+            };
+        },
+    },
+    bind: {
+        stx: '/bind',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            if ($.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/privateonly') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            let force = false;
+            if ($.argumen) {
+                if ($.argumen !== 'FORCE') return;
+                force = true;
+            }
+            const code = 'bind:code=' + Array.from({ length: 5 }, () => Math.random().toString(36).slice(2)).join('');
+            if (cache.data.binds && (idx = _.findIndex(cache.data.binds, { uid: $.uid })) !== -1) {
+                cache.data.binds.splice(idx, 1, {
+                    code: code,
+                    force: force,
+                    id: $.id,
+                    uid: $.uid,
+                    time: Date.now(),
+                });
+            } else {
+                (cache.data.binds ||= []).push({
+                    code: code,
+                    force: force,
+                    id: $.id,
+                    uid: $.uid,
+                    time: Date.now(),
+                });
+            }
+            return {
+                teks: (force ? $.TEKS('command/bind/force') + '\n\n' : '') + $.TEKS('command/bind/code').replace('%code', code),
+            };
+        },
+    },
+    unbind: {
+        stx: '/unbind',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            if ($.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/privateonly') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.argumen) {
+                return { teks: $.TEKS('command/unbind/notice') };
+            } else {
+                if ($.argumen === 'FORCE') {
+                    const id = 'U-' + Math.random().toString(36).slice(2).toUpperCase();
+                    let h = await DB.buat({
+                        _id: id,
+                        join: Date.now(),
+                        name: data.i.name,
+                    });
+                    if (h._e) throw h._e;
+                    h = await DB.perbarui({ _id: $.uid }, { $set: { bindto: id } });
+                    if (h._e) {
+                        await DB.hapus({ _id: id });
+                        throw h._e;
+                    }
+                    if ((await DB.cari({ bindto: $.id }, true)).hasil.filter((v) => v._id !== $.uid).length === 0) {
+                        await DB.hapus({ _id: $.id });
+                    }
+                    return { teks: $.TEKS('command/unbind/success').replace('%old', $.id).replace('%new', id) };
+                } else {
+                    return;
+                }
+            }
+        },
+    },
+    boundlist: {
+        stx: '/boundlist',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            const bound = (await DB.cari({ bindto: $.id }, true)).hasil?.filter?.((v) => v._id !== $.uid);
+            return {
+                teks: bound?.length
+                    ? bound
+                          .map(
+                              (v, i) =>
+                                  `${i + 1}. [${v._id.split('#')[0]}] ${
+                                      v.tg_name ? v.tg_name : $.pengirim.endsWith('#C') ? v._id.split('#')[1].replace(/.{4}$/, '****') : v._id.split('#')[1]
+                                  }`
+                          )
+                          .join('\n')
+                    : $.TEKS('command/boundlist/notfound'),
+            };
+        },
+    },
+    forward: {
+        stx: '/forward [acc/all]',
+        cat: 'multiplatformtools',
+        fn: async ($, data) => {
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.q) return { teks: $.TEKS('command/forward') };
+            const bound = (await DB.cari({ bindto: $.id }, true)).hasil?.filter?.((v) => v._id !== $.uid);
+            if (!bound.length) return { teks: $.TEKS('command/forward/notbound') };
+            let idx;
+            if ($.args[0]?.toLowerCase?.() === 'all') {
+                const res = await Promise.allSettled(bound.map((v) => forward(v._id)));
+                const fulfilled = res.filter((v) => v.status === 'fulfilled');
+                const rejected = res.filter((v) => v.status === 'rejected');
+                const errors = rejected.filter((v) => v.reason !== 'notsupported');
+                const notsupported = rejected.filter((v) => v.reason === 'notsupported');
+                if (errors.length) {
+                    const errId = Math.random().toString(36).slice(2).toUpperCase();
+                    cache.data.errors ||= {};
+                    cache.data.errors[errId] = {
+                        $: $,
+                        e: rejected.map((v) => v.reason?.stack ?? v.reason).join('\n=============\n'),
+                        t: Date.now(),
+                    };
+                    kirimPesan($.pengirim, {
+                        teks: $.TEKS('command/forward/failmany').replace('%count', rejected.length).replace('%e', errId),
+                    });
+                }
+                if (notsupported.length) {
+                    kirimPesan($.pengirim, {
+                        teks: $.TEKS('command/forward/messagenotsupportedmany').replace('%count', notsupported.length),
+                    });
+                }
+                if (fulfilled.length) return { teks: $.TEKS('command/forward/successmany').replace('%count', fulfilled.length) };
+            } else if (!isNaN((idx = parseInt($.argumen))) && idx > 0 && idx <= bound.length) {
+                try {
+                    await forward(bound[idx - 1]._id);
+                    return { teks: $.TEKS('command/forward/success') };
+                } catch (e) {
+                    if (e === 'notsupported') return { teks: $.TEKS('command/forward/messagenotsupported') };
+                    throw e;
+                }
+            } else {
+                return { teks: $.TEKS('command/forward') };
+            }
 
-//////////////////// FUNGSI PEMBANTU
+            async function forward(tujuan) {
+                const msg = {};
+                if ($.uid.startsWith('WA')) {
+                    if (tujuan.startsWith('WA')) {
+                        msg.copy = {
+                            q: $.mid,
+                        };
+                    } else if (tujuan.startsWith('TG')) {
+                        if ($.q.gambar) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.gambar });
+                            msg.gambar = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.video) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.video });
+                            msg.video = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.stiker) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.stiker });
+                            if ($.q.stiker.animasi) {
+                                const gif = await webp.keGif(file.file);
+                                msg.video = {
+                                    file: gif,
+                                    gif: true,
+                                };
+                            } else {
+                                msg.stiker = { file: file.file };
+                            }
+                        } else if ($.q.lokasi) {
+                            msg.lokasi = $.q.lokasi;
+                        } else if ($.q.audio) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.audio });
+                            msg.audio = { file: file.file };
+                        } else if ($.dokumen) {
+                            const file = await IPC.kirimKueri('WA', { unduh: $.q.dokumen });
+                            msg.dokumen = { file: file.file, mimetype: $.q.dokumen.mimetype, namaFile: $.q.dokumen.namaFile };
+                            msg.teks = `[[ ${$.q.dokumen.namaFile} ]]`;
+                        } else if ($.q.kontak) {
+                            msg.kontak = $.q.kontak;
+                        } else {
+                            if ($.q.teks) {
+                                msg.teks = $.q.teks;
+                            } else {
+                                throw 'notsupported';
+                            }
+                        }
+                    }
+                } else if ($.uid.startsWith('TG')) {
+                    if (tujuan.startsWith('TG')) {
+                        msg.copy = {
+                            from: $.uid,
+                            mid: $.q.mid,
+                        };
+                    } else if (tujuan.startsWith('WA')) {
+                        if ($.q.gambar) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.gambar });
+                            msg.gambar = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.video) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.video });
+                            msg.video = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.stiker) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.stiker });
+                            msg.stiker = { file: file.file };
+                        } else if ($.q.lokasi) {
+                            msg.lokasi = $.q.lokasi;
+                        } else if ($.q.audio) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.audio });
+                            msg.audio = { file: file.file };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.dokumen) {
+                            const file = await IPC.kirimKueri('TG', { unduh: $.q.dokumen });
+                            msg.dokumen = {
+                                file: file.file,
+                                mimetype: $.q.dokumen.mimetype,
+                                namaFile: $.q.dokumen.namaFile,
+                            };
+                            msg.teks = $.q.teks;
+                        } else if ($.q.kontak) {
+                            msg.kontak = $.q.kontak;
+                        } else {
+                            if ($.q.teks) {
+                                msg.teks = $.q.teks;
+                            } else {
+                                throw 'notsupported';
+                            }
+                        }
+                    }
+                }
+
+                const { s, _e } = await _kirimPesan(tujuan, msg);
+                if (s === false) {
+                    throw _e;
+                }
+            }
+        },
+    },
+    groupstatus: {
+        stx: '/groupstatus',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            return {
+                teks: $.TEKS('command/groupstatus')
+                    .replace('%join', new Date(data.c.join).toLocaleString())
+                    .replace('%expr', new Date(data.c.expiration).toLocaleString()),
+            };
+        },
+    },
+    tebakgambar: {
+        stx: '/tebakgambar',
+        cat: 'games',
+        lang: ['id'],
+        fn: async ($) => {
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            const endpoints = _.shuffle(['tebak/gambar', 'tebak/gambar2']);
+            let res;
+            for (const endpoint of endpoints) {
+                res = await (await lolHumanAPI(endpoint)).json();
+                if (res.status == 200) break;
+            }
+            if (res.status != 200) throw `${endpoints} ${res.message}`;
+            const { s, _e } = await _kirimPesan($.pengirim, {
+                gambar: { url: res.result.image },
+                teks: $.TEKS('command/tebakgambar'),
+                saran: ['/cancel'],
+            });
+            if (s === false) throw _e;
+            waiter.tambahkan($.pengirim, ['tebakgambar'], {
+                jawaban: res.result.answer.toLowerCase(),
+                retries: 3,
+            });
+            return;
+        },
+        hd: async (waiter, $) => {
+            if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban) });
+                }
+                if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban) });
+                } else {
+                    if (--waiter.val.retries > 0) {
+                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) });
+                    } else {
+                        return waiter.selesai({ teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban) });
+                    }
+                }
+            } else {
+                return waiter.notice('/cancel', 'tebakgambar');
+            }
+        },
+    },
+    delete: {
+        stx: '/delete',
+        cat: 'bot',
+        fn: async ($) => {
+            if (!$.q) return { teks: $.TEKS('command/delete/noreply') };
+            if ($.platform === 'WA' && !$.q.me) return { teks: $.TEKS('command/delete/notme') };
+            const { r } = await IPC.kirimKueri($.platform, {
+                delmsg: {
+                    cid: $.pengirim,
+                    mid: $.q.mid,
+                },
+            });
+            if (r) {
+                if ($.platform === 'TG') {
+                    IPC.kirimKueri($.platform, {
+                        delmsg: {
+                            cid: $.pengirim,
+                            mid: $.mid,
+                        },
+                    });
+                }
+                return;
+            } else return { teks: $.TEKS('command/delete/fail') };
+        },
+    },
+    apakah: {
+        stx: '/apakah',
+        cat: 'fun',
+        lang: ['id'],
+        fn: ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/apakah') };
+            return { teks: _.sample($.TEKS('command/apakah/$answers').split('\n')) };
+        },
+    },
+    bahasapurba: {
+        stx: '/bahasapurba [text]',
+        cat: 'fun',
+        lang: ['id'],
+        fn: async ($, data, { endpoint, name }) => {
+            if (!$.arg) return { teks: $.TEKS(name ? 'command/' + name : 'command/bahasapurba') };
+            const res = await (await lolHumanAPI(endpoint || 'bahasapurba', 'text=' + encodeURI($.arg))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    bahasajaksel: {
+        stx: '/bahasajaksel [text]',
+        cat: 'fun',
+        lang: ['id'],
+        fn: async ($, data) => {
+            return Perintah.bahasapurba.fn($, data, { endpoint: 'randombahasa', name: 'bahasajaksel' });
+        },
+    },
+    growtopia: {
+        stx: '/growtopia',
+        cat: 'information',
+        fn: async ($) => {
+            const res = await (await lolHumanAPI('growtopia')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: { url: res.result.wotd.preview },
+                teks: $.TEKS('command/growtopia').replace('%wotd', res.result.wotd.name).replace('%onl', res.result.player_online),
+            };
+        },
+    },
+    osu: {
+        stx: '/osu [username]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/osu') };
+            const res = await (await lolHumanAPI('osuname/' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: Object.entries(res.result)
+                    .map((v) => v.join(': '))
+                    .join('\n'),
+            };
+        },
+    },
+    heroml: {
+        stx: '/heroml [hero]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/heroml') };
+            const res = await (await lolHumanAPI('heroml/' + encodeURI($.argumen))).json();
+            if (res.status == 404) return { teks: $.TEKS('command/heroml/notfound') };
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result.icon ? { url: res.result.icon } : undefined,
+                teks: `${res.result.hero_name.toUpperCase()}\n\n"${res.result.ent_quotes}"\n\n${Object.entries(res.result.detail)
+                    .map((v) => v.join(': '))
+                    .join('\n')}\n\n${Object.entries(res.result.attr)
+                    .map((v) => v.join(': '))
+                    .join('\n')}`,
+            };
+        },
+    },
+    mlusername: {
+        stx: '/mlusername [id] [serverid]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!($.args[0] && $.args[1])) return { teks: $.TEKS('command/mlusername') };
+            const res = await (await lolHumanAPI(`mobilelegend/${encodeURI($.args[0])}/${encodeURI($.args[1])}`)).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    ffusername: {
+        stx: '/ffusername [id]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.args[0]) return { teks: $.TEKS('command/ffusername') };
+            const res = await (await lolHumanAPI(`freefire/${encodeURI($.args[0])}`)).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    pubgusername: {
+        stx: '/pubgusername [id]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!($.args[0] && $.args[1])) return { teks: $.TEKS('command/pubgusername') };
+            const res = await (await lolHumanAPI(`pubg/${encodeURI($.args[0])}/${encodeURI($.args[1])}`)).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    addrss: {
+        stx: '/addRSS [link]',
+        cat: 'rss',
+        fn: async ($) => {
+            if (!$.args[0]) return { teks: $.TEKS('command/addrss') };
+            const url = $.args[0].startsWith('http') ? $.args[0] : 'https://' + $.args[0];
+            try {
+                new URL(url);
+            } catch {
+                return { teks: $.TEKS('command/addrss') };
+            }
+            const { h, _e } = IPC.kirimKueri('RS', {
+                add: [url, $.pengirim],
+            });
+            if (_e) {
+                if (_e === 'notfeed') return { teks: $.TEKS('command/addrss/notfeed') };
+                else throw _e;
+            }
+            return { teks: $.TEKS('command/addrss/done') };
+        },
+    },
+    rsslist: {
+        stx: '/RSSlist',
+        cat: 'rss',
+        fn: async ($) => {
+            const { _e, hasil } = await DB.cari({ _id: $.pengirim });
+            if (_e) throw _e;
+            if (!hasil.rss) return { teks: $.TEKS('command/rsslist/notfound') };
+            return {
+                teks: hasil.rss.map((v, i) => `${i + 1}. ${v}`).join('\n'),
+            };
+        },
+    },
+    deleterss: {
+        stx: '/deleteRSS',
+        cat: 'rss',
+        fn: async ($) => {
+            if (!$.args[0] || isNaN(parseInt($.args[0]))) return { teks: $.TEKS('command/deleterss') };
+            const idx = parseInt($.args[0]) - 1;
+            const { h, l, _e } = await IPC.kirimKueri('RS', {
+                del: [idx, $.pengirim],
+            });
+            if (_e) {
+                if (_e === 'outofindex') return { teks: $.TEKS('command/deleterss') };
+                else throw _e;
+            }
+            return { teks: $.TEKS('command/deleterss/done').replace('%link', l) };
+        },
+    },
+};
 
 function saveFetchByStream(res, ext, maxSize) {
     return new Promise((resolve, reject) => {
@@ -2575,10 +3175,11 @@ function saveFetchByStream(res, ext, maxSize) {
     });
 }
 
-function listPerintah(listKategori, perintahObj) {
+function listPerintah(listKategori, perintahObj, lang) {
     const map = {};
     const cats = Object.fromEntries(listKategori.split('\n').map((v) => v.split('=')));
     for (const cmd in perintahObj) {
+        if (perintahObj[cmd].lang && !perintahObj[cmd].lang.includes(lang)) continue;
         const cat = cats[perintahObj[cmd].cat];
         if (!map[cat]) map[cat] = [];
         map[cat].push((perintahObj[cmd].lim ? '$ ' : '') + perintahObj[cmd].stx);
@@ -2733,6 +3334,8 @@ process.on('message', async (pesan) => {
         if (pesan.hasOwnProperty('_')) {
             if (pesan._.hasOwnProperty('pengirim')) {
                 proses(pesan);
+            } else if (pesan._?.rss) {
+                rss(pesan._.rss);
             }
         }
     });

@@ -44,13 +44,10 @@ async function proses(pesan) {
             }
         } else if (pesan._.hasOwnProperty('r')) {
             if (pesan._.m) {
-                let results = _.filter(cache, pesan._.r);
-                if (!results.length) {
-                    results = await db.find(pesan._.r).toArray();
-                    for (const data of results) {
-                        cache.push(data);
-                        _.pull(idTidakAda, data._id);
-                    }
+                results = await db.find(pesan._.r).toArray();
+                for (const data of results) {
+                    cache.push(data);
+                    _.pull(idTidakAda, data._id);
                 }
                 hasil = results;
             } else {

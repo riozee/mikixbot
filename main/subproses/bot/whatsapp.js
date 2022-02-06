@@ -8,6 +8,8 @@ const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
 const cache = {
     msg: [],
+    cekizin: {},
+    blocklist: [],
 };
 
 if (!fs.existsSync('./data/wa-tmpdb.json')) fs.writeFileSync('./data/wa-tmpdb.json', '{}');
@@ -45,6 +47,7 @@ function mulai() {
     if (!bot) {
         log(8);
         bot = koneksikanKeWA();
+        cache.blocklist = [];
     }
 
     bot.ev.on('messages.upsert', async (_pesan) => {
@@ -55,14 +58,31 @@ function mulai() {
             //if (_pesan.type === 'notify') return;
             if (pesan.key?.fromMe) return;
             if (pesan.key?.remoteJid === 'status@broadcast') return;
-            if (Date.now() - pesan.messageTimestamp * 1000 > 10000) return;
+            if (pesan.key?.id && cache.msg.find((v) => v.key.id === pesan.key?.id)) return;
+            if (Math.floor(Date.now() / 1000) - Number(String(pesan.messageTimestamp)) > 10) return;
 
             const uid = pesan.key?.participant || pesan.key?.remoteJid;
             const cid = pesan.key?.remoteJid;
 
             if (!(uid && cid)) return;
 
-            log(1, pesan.message);
+            if (!cache.cekizin[cid]) {
+                if (cid.endsWith('@g.us')) {
+                    try {
+                        const { announce } = await bot.groupMetadata(cid);
+                        if (announce) return (cache.cekizin[cid] = 'n');
+                    } catch (e) {
+                        if (String(e).includes('item-not-found')) return (cache.cekizin[cid] = 'n');
+                        console.log(e);
+                    }
+                } else {
+                    if (cache.blocklist.includes(cid)) return (cache.cekizin[cid] = 'n');
+                }
+                cache.cekizin[cid] = 'a';
+            }
+            if (cache.cekizin[cid] === 'n') return;
+
+            log(1, pesan);
 
             let $pesan = {
                 pengirim: uid === cid ? IDPengguna(uid) : IDChat(cid),
@@ -73,7 +93,7 @@ function mulai() {
             function muatPesan(tipe, isi) {
                 const _ = {};
 
-                const teks = (typeof isi === 'string' ? isi : '') || isi.caption || isi.text || isi.singleSelectReply?.selectedRowId || isi.selectedButtonId || '';
+                const teks = (typeof isi === 'string' ? isi : '') || isi.caption || isi.text || isi.singleSelectReply?.selectedRowId || isi.selectedDisplayText || '';
                 if (teks) _.teks = teks;
 
                 if (tipe === 'imageMessage') {
@@ -179,15 +199,17 @@ function mulai() {
                 $pesan = {
                     ...$pesan,
                     ...muatPesan(tipe, isi),
+                    mentioned: [],
                 };
                 if (isi.contextInfo?.expiration) $pesan.wa_disappearing_message = isi.contextInfo.expiration;
-
+                if (isi.contextInfo?.mentionedJid) $pesan.mentioned.push(...isi.contextInfo.mentionedJid.map((v) => IDPengguna(v)));
+                if (isi.contextInfo?.participant) $pesan.mentioned.push(IDPengguna(isi.contextInfo.participant));
                 if (isi.contextInfo?.quotedMessage) {
                     for (const tipe in isi.contextInfo.quotedMessage) {
                         const _isi = isi.contextInfo.quotedMessage[tipe];
                         $pesan.q = muatPesan(tipe, _isi);
                         $pesan.q.mid = isi.contextInfo.stanzaId;
-
+                        $pesan.q.me = isi.contextInfo.participant === creds.bot_wa_id;
                         break;
                     }
                 }
@@ -226,11 +248,30 @@ function mulai() {
             }
         }
         if (connection && connection !== 'connecting') {
+            bot.fetchBlocklist().then((v) => v.forEach((v) => cache.blocklist.push(v)));
             log(3, pembaruan);
         }
     });
 
     bot.ev.on('creds.update', saveState);
+
+    bot.ev.on('groups.update', (upd) => {
+        upd.forEach((u) => (u.announce ? (cache.cekizin[u.id] = 'n') : 0));
+    });
+    bot.ev.on('groups.upsert', (upd) => {
+        upd.forEach((u) => (u.announce ? (cache.cekizin[u.id] = 'n') : 0));
+    });
+    bot.ev.on('group-participants.update', (upd) => {
+        if (upd.participants.includes(creds.bot_wa_id)) {
+            if (upd.action === 'remove') cache.cekizin[upd.id] = 'n';
+        }
+    });
+    bot.ev.on('blocklist.set', async () => {
+        cache.blocklist = await bot.fetchBlocklist();
+    });
+    bot.ev.on('blocklist.update', async () => {
+        cache.blocklist = await bot.fetchBlocklist();
+    });
 }
 
 mulai();
@@ -239,6 +280,30 @@ async function kirimPesan(pesan) {
     log(4, pesan);
     const $ = pesan._;
     const penerima = ID($.penerima);
+    if (cache.cekizin[penerima] === 'n') return { _e: 'notallowed' };
+    if (!cache.cekizin[penerima]) {
+        if (penerima.endsWith('@g.us')) {
+            try {
+                const { announce } = await bot.groupMetadata(penerima);
+                if (announce) {
+                    cache.cekizin[penerima] = 'n';
+                    return { _e: 'notallowed' };
+                }
+            } catch (e) {
+                if (String(e).includes('item-not-found')) {
+                    cache.cekizin[penerima] = 'n';
+                    return { _e: 'notallowed' };
+                }
+                console.log(e);
+            }
+        } else {
+            if (cache.blocklist.includes(penerima)) {
+                cache.cekizin[penerima] = 'n';
+                return { _e: 'notallowed' };
+            }
+        }
+        cache.cekizin[penerima] = 'a';
+    }
     let opsi = {};
     if ($.hasOwnProperty('re')) {
         if (typeof $.re === 'string' && $.anch) {
@@ -338,8 +403,29 @@ async function kirimPesan(pesan) {
             msg.contacts = { contacts: kontak };
         }
 
-        //////////////////////////////// ANONYMOUS CHAT FORWARD MESSAGE
+        //////////////////////////////// FORWARD MESSAGE
         else if ($.copy) {
+            if ($.copy.q) {
+                const p = cache.msg.filter((v) => v.key.id === $.copy.q)[0].message;
+                if (!p) throw 'nomsg';
+                let q, _tipe;
+                for (const tipe in p) {
+                    if (tipe === 'senderKeyDistributionMessage') continue;
+                    if (tipe === 'messageContextInfo') continue;
+                    if (tipe === 'protocolMessage') continue;
+                    for (const qtipe in p[tipe].contextInfo.quotedMessage) {
+                        q = p[tipe].contextInfo.quotedMessage[qtipe];
+                        _tipe = qtipe;
+                        break;
+                    }
+                    break;
+                }
+                const fmsg = generateForwardMessageContent({ key: {}, message: { [_tipe]: q } });
+                const cmsg = generateWAMessageFromContent(penerima, fmsg, opsi);
+                await bot.relayMessage(penerima, cmsg.message, { messageId: cmsg.key.id });
+                return { s: true, mid: cmsg.key.id };
+            }
+
             const _msg = cache.anch[$.copy.roomID][$.copy.msgID];
             const fmsg = generateForwardMessageContent(_msg);
             for (const tipe in fmsg) {
@@ -363,6 +449,14 @@ async function kirimPesan(pesan) {
         else {
             msg.text = $.teks;
         }
+        if ($.saran && ($.teks || $.gambar || $.video || $.dokumen || $.lokasi)) {
+            msg.buttons = $.saran.map((v) => ({
+                buttonId: Math.random().toString(36).slice(2),
+                buttonText: { displayText: v },
+                type: 1,
+            }));
+        }
+
         const terkirim = await bot.sendMessage(penerima, msg, opsi);
         if ($.anch) {
             if (!cache.anch[$.anch.roomID]) cache.anch[$.anch.roomID] = {};
@@ -407,7 +501,7 @@ function anch(pesan) {
 }
 
 process.on('message', (pesan) => {
-    if (pesan.slice(-2).endsWith('i')) {
+    if (pesan.slice(0, -2).endsWith('i')) {
         IPC.terimaDanBalasKueri(pesan, async (pesan) => {
             if (pesan._?.penerima) {
                 return await kirimPesan(pesan);
@@ -419,6 +513,8 @@ process.on('message', (pesan) => {
                 return {
                     admin: Boolean((await bot.groupMetadata(ID(pesan._.isAdmin.c))).participants.filter((v) => v.id === ID(pesan._.isAdmin.u))[0]?.admin),
                 };
+            } else if (pesan._?.delmsg) {
+                return { r: Boolean(await bot.sendMessage(ID(pesan._.delmsg.cid), { delete: { id: pesan._.delmsg.mid } })) };
             }
         });
     } else {

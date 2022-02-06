@@ -9,10 +9,18 @@ const { Telegraf } = require('telegraf');
 
 const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
-const TOKEN = creds.tgtoken;
+const cache = {
+    cekizin: {},
+};
 
 log(0);
-const bot = new Telegraf(TOKEN);
+const bot = new Telegraf(creds.tgtoken);
+
+let bot_id, bot_username;
+bot.telegram.getMe().then(({ id, username }) => {
+    bot_id = id;
+    bot_username = username;
+});
 
 bot.on('new_chat_members', (konteks) => {});
 
@@ -20,15 +28,41 @@ bot.on('left_chat_member', (konteks) => {});
 
 bot.on('callback_query', (konteks) => {});
 
-bot.on('message', (konteks) => {
-    log(1, konteks.message, konteks.from, konteks.chat);
-    const uid = konteks.from.id;
-    const cid = konteks.chat.id;
+bot.on(['message', 'channel_post'], async (konteks) => {
+    if (konteks.channelPost) {
+        konteks = {
+            message: {
+                ...konteks.channelPost,
+                from: konteks.channelPost.sender_chat,
+                reply_to_message: konteks.channelPost.reply_to_message
+                    ? {
+                          ...konteks.channelPost.reply_to_message,
+                          from: konteks.channelPost.reply_to_message.sender_chat,
+                      }
+                    : undefined,
+            },
+        };
+    }
+    log(1, konteks, konteks.message, konteks.message.from, konteks.message.chat);
+    const uid = konteks.message.from.id;
+    const cid = konteks.message.chat.id;
+
+    if (!cache.cekizin[cid] || Date.now() - cache.cekizin[cid].t > 10000) {
+        cache.cekizin[cid] = {
+            t: Date.now(),
+            p: await cekIzin(cid, konteks.message.chat.type === 'channel'),
+        };
+        console.log(cache.cekizin[cid]);
+    }
+    if (cache.cekizin[cid].p === 'n') return;
 
     let pesan = {
         pengirim: uid == cid ? IDPengguna(uid) : IDChat(cid),
         uid: IDPengguna(uid),
         mid: konteks.message.message_id,
+        tg_name: konteks.message.from.username
+            ? '@' + konteks.message.from.username
+            : konteks.message.sender_chat?.title || [konteks.message.from.first_name, konteks.message.from.last_name].filter(Boolean).join(' '),
     };
 
     function muatPesan(message) {
@@ -106,11 +140,52 @@ bot.on('message', (konteks) => {
     pesan = {
         ...pesan,
         ...muatPesan(konteks.message),
+        mentioned: [],
     };
 
     if (konteks.message.reply_to_message) {
         pesan.q = muatPesan(konteks.message.reply_to_message);
         pesan.q.mid = konteks.message.reply_to_message.message_id;
+        pesan.q.me = konteks.message.reply_to_message.from.id === bot_id;
+    }
+
+    if (konteks.message.reply_to_message?.from) {
+        const k = konteks.message.reply_to_message.from;
+        if (k.username) pesan.mentioned.push(k.username);
+        else pesan.mentioned.push(k.first_name + (k.last_name ? ' ' + k.last_name : ''));
+    }
+
+    if (konteks.message.entities) {
+        let r;
+        if ((r = konteks.message.entities.find((v) => v.type === 'bot_command' && v.offset === 0))) {
+            if ((r = pesan.teks.substr(r.offset, r.length)) && r.includes('@')) {
+                const [command, username] = r.split('@');
+                if (username !== bot_username) return;
+                else pesan.teks = pesan.teks.replace(r, command);
+            }
+        }
+        konteks.message.entities
+            .filter((v) => v.type === 'mention' || v.type === 'text_mention')
+            .map((v) => pesan.teks.substr(v.offset, v.length))
+            .forEach((v) => pesan.mentioned.push(v));
+    }
+    if (konteks.message.caption_entities) {
+        let r;
+        if ((r = konteks.message.entities.find((v) => v.type === 'bot_command' && v.offset === 0))) {
+            if ((r = pesan.teks.substr(r.offset, r.length)) && r.includes('@')) {
+                const [command, username] = r.split('@');
+                if (username !== bot_username) return;
+                else pesan.teks = pesan.teks.replace(r, command);
+            }
+        }
+        konteks.message.caption_entities
+            .filter((v) => v.type === 'mention' || v.type === 'text_mention')
+            .map((v) => pesan.teks.substr(v.offset, v.length))
+            .forEach((v) => pesan.mentioned.push(v));
+    }
+    if (konteks.message.migrate_to_chat_id) {
+        pesan.migrate_from_id = konteks.message.migrate_from_chat_id;
+        pesan.migrate_to_id = konteks.message.migrate_to_chat_id;
     }
 
     log(2, pesan);
@@ -123,11 +198,27 @@ async function kirimPesan(pesan) {
     log(4, pesan);
     const penerima = ID(pesan._.penerima);
     let opsi = {};
-    if (pesan._.hasOwnProperty('re')) {
+    if (pesan._.re) {
         if (typeof pesan._.re === 'number') {
             opsi.reply_to_message_id = pesan._.re;
         } else {
             opsi.reply_to_message_id = pesan._.mid;
+        }
+    }
+    if (pesan._.saran) {
+        console.log(pesan._.saran);
+        opsi.reply_markup = {
+            keyboard: pesan._.saran.map((v) => [{ text: v }]),
+            one_time_keyboard: true,
+            resize_keyboard: true,
+            selective: true,
+        };
+    } else {
+        if (!pesan._.tg_no_remove_keyboard) {
+            opsi.reply_markup = {
+                remove_keyboard: true,
+                selective: true,
+            };
         }
     }
 
@@ -136,6 +227,7 @@ async function kirimPesan(pesan) {
         let m, ids;
         //////////////////////////////// GAMBAR
         if ($.gambar) {
+            await bot.telegram.sendChatAction(penerima, 'upload_photo');
             if ($.teks) {
                 const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
                     teksSisa = $.teks.length > 1024 ? $.teks.slice(1024) : '';
@@ -152,6 +244,7 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// VIDEO
         else if ($.video) {
+            await bot.telegram.sendChatAction(penerima, 'upload_video');
             if ($.video.gif) {
                 if ($.teks) {
                     const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
@@ -196,6 +289,7 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// STIKER
         else if ($.stiker) {
+            await bot.telegram.sendChatAction(penerima, 'choose_sticker');
             if ($.stiker.id) m = await bot.telegram.sendSticker(penerima, $.stiker.id, { ...opsi });
             else if ($.stiker.file) m = await bot.telegram.sendSticker(penerima, { source: $.stiker.file }, { ...opsi });
             else if ($.stiker.url) m = await bot.telegram.sendSticker(penerima, { url: $.stiker.url }, { ...opsi });
@@ -203,11 +297,13 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// LOKASI
         else if ($.lokasi) {
+            await bot.telegram.sendChatAction(penerima, 'find_location');
             m = await bot.telegram.sendLocation(penerima, $.lokasi.lat, $.lokasi.lon, opsi);
         }
 
         //////////////////////////////// AUDIO
         else if ($.audio) {
+            await bot.telegram.sendChatAction(penerima, 'upload_voice');
             if ($.teks) {
                 const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
                     teksSisa = $.teks.length > 1024 ? $.teks.slice(1024) : '';
@@ -224,6 +320,7 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// DOKUMEN
         else if ($.dokumen) {
+            await bot.telegram.sendChatAction(penerima, 'upload_document');
             opsi.file_name = $.namaFile || undefined;
             if ($.teks) {
                 const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
@@ -262,6 +359,7 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// TEKS
         else {
+            await bot.telegram.sendChatAction(penerima, 'typing');
             ids = await kirimPesanTeks(penerima, $.teks, opsi);
         }
         log(5);
@@ -269,7 +367,34 @@ async function kirimPesan(pesan) {
     } catch (e) {
         log(6);
         console.error(e);
+        const se = String(e);
+        if (se.includes('need administrator rights') || se.includes('have no rights') || se.includes('blocked')) {
+            cache.cekizin[cid] = {
+                t: Date.now(),
+                p: 'n',
+            };
+            return { s: false, _e: 'notallowed' };
+        }
         return { s: false, _e: e };
+    }
+}
+
+async function cekIzin(id, channel = false) {
+    if (channel) {
+        const admins = await bot.telegram.getChatAdministrators(id);
+        return admins.filter((v) => v.user.id === bot_id)[0].can_post_messages ? 'a' : 'n';
+    } else {
+        try {
+            const { permissions } = await bot.telegram.getChat(id);
+            if (permissions) return permissions.can_send_messages ? 'a' : 'n';
+            else return 'a';
+        } catch (e) {
+            if (String(e).includes('chat not found')) return 'n';
+            else {
+                console.error(e);
+                return 'a';
+            }
+        }
     }
 }
 
@@ -284,7 +409,7 @@ async function unduhMedia(media) {
 }
 
 process.on('message', (pesan) => {
-    if (pesan.slice(-2).endsWith('i')) {
+    if (pesan.slice(0, -2).endsWith('i')) {
         IPC.terimaDanBalasKueri(pesan, async (pesan) => {
             if (pesan._?.penerima) {
                 return await kirimPesan(pesan);
@@ -296,6 +421,8 @@ process.on('message', (pesan) => {
                 return {
                     admin: (await bot.telegram.getChatAdministrators(ID(pesan._.isAdmin.c))).map((v) => String(v.user.id)).includes(ID(pesan._.isAdmin.u)),
                 };
+            } else if (pesan._?.delmsg) {
+                return { r: Boolean(await bot.telegram.deleteMessage(ID(pesan._.delmsg.cid), pesan._.delmsg.mid)) };
             }
         });
     } else {

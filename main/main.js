@@ -1,17 +1,28 @@
 const { jalankanFn, encodePesan, decodePesan } = require('./utils');
 const fork = require('child_process').fork;
 const fs = require('fs');
+const fsp = require('fs/promises');
 
 if (!fs.existsSync('./tmp/')) fs.mkdirSync('./tmp/');
 
 const creds = JSON.parse(fs.readFileSync('./creds.json'));
+
+setInterval(async () => {
+    const files = await fsp.readdir('./tmp/');
+    for (const file of files) {
+        const date = Number(file.split('#')[0]);
+        if (Date.now() - date > 60000 * 60) {
+            await fsp.unlink('./tmp/' + file);
+        }
+    }
+}, 60000);
 
 const proses2 = {};
 
 const subproses = [
     './main/subproses/database.js',
     './main/subproses/perintah.js',
-    './main/subproses/timer.js',
+    './main/subproses/rss.js',
     './main/subproses/bot/whatsapp.js',
     './main/subproses/bot/telegram.js',
 ];
@@ -49,6 +60,8 @@ async function main(pesan) {
         teruskanKe('./main/subproses/bot/telegram.js', pesan);
     } else if (pesan.endsWith('WA')) {
         teruskanKe('./main/subproses/bot/whatsapp.js', pesan);
+    } else if (pesan.endsWith('RS')) {
+        teruskanKe('./main/subproses/rss.js', pesan);
     }
 
     //////////////////////////////
