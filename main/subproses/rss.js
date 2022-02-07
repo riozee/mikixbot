@@ -128,7 +128,7 @@ async function cekRSS(link) {
                     cache.lastpub[link]['itemPubDate'] = item.pubDate || item.pubdate;
                 }
             }
-            if (items.length) {
+            if (items.length > 0) {
                 resolve({
                     items: items.map((v) => ({
                         title: v.title,

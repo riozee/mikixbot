@@ -2878,7 +2878,7 @@ const Perintah = {
                             const file = await IPC.kirimKueri('TG', { unduh: $.q.audio });
                             msg.audio = { file: file.file };
                             msg.teks = $.q.teks;
-                        } else if ($.q.dokumen) {
+                        } else if ($.q.dokumen && $.q.dokumen.ukuran < ukuranMaksimal.dokumen.WA) {
                             const file = await IPC.kirimKueri('TG', { unduh: $.q.dokumen });
                             msg.dokumen = {
                                 file: file.file,
@@ -3311,7 +3311,7 @@ const Perintah = {
                             const file = await IPC.kirimKueri('TG', { unduh: $.q.audio });
                             msg.audio = { file: file.file };
                             msg.teks = $.q.teks;
-                        } else if ($.q.dokumen) {
+                        } else if ($.q.dokumen && $.q.dokumen.ukuran < ukuranMaksimal.dokumen.WA) {
                             const file = await IPC.kirimKueri('TG', { unduh: $.q.dokumen });
                             msg.dokumen = {
                                 file: file.file,
