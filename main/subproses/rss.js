@@ -40,6 +40,7 @@ async function tambahRSS(link, chat) {
         u: [{ _id: chat }, { $push: { rss: link } }],
     });
     if (_e) return { _e: _e };
+    RSS.push({ chat: chat, rss: link });
     return { h: true };
 }
 
@@ -86,7 +87,7 @@ async function cekRSS(link) {
         req.then((res) => {
             cache.lastpub[link] ||= {};
             if (res.status != 200) {
-                if (res.status == 304) return resolve('notmodified');
+                if (res.status == 304) return resolve('notmodified-304');
                 const err = new Error('Bad status code: ' + res.status);
                 console.error(err);
                 return reject(err);
@@ -110,14 +111,17 @@ async function cekRSS(link) {
             }
         });
         feedparser.on('end', function () {
-            if (cache.lastpub[link]?.['pubDate'] == this.meta.pubdate || this.meta.pubDate) return resolve('notmodified');
+            if ((this.meta.pubdate || this.meta.pubDate) && cache.lastpub[link]?.['pubDate'] == (this.meta.pubdate || this.meta.pubDate))
+                return resolve('notmodified-samepubdate');
             cache.lastpub[link]['pubDate'] = this.meta.pubdate || this.meta.pubDate;
             if (items[0]?.pubDate || items[0]?.pubdate) {
                 items = items.sort((a, b) => new Date(a.pubdate || a.pubDate).getTime() - new Date(b.pubdate || b.pubDate).getTime());
-                for (const [idx, item] of Object.entries(items)) {
+                for (const item of items) {
                     if (cache.lastpub[link]?.['itemPubDate']) {
-                        if (new Date(cache.lastpub[link]['itemPubDate']).getTime() > new Date(item.pubDate || item.pubdate).getTime()) {
-                            items.splice(idx, 1);
+                        const cdate = new Date(cache.lastpub[link]['itemPubDate']);
+                        const idate = new Date(item.pubDate || item.pubdate);
+                        if (cdate.getTime() >= idate.getTime()) {
+                            _.remove(items, (v) => v.pubDate || v.pubdate === item.pubDate || item.pubdate);
                             continue;
                         }
                     }
@@ -134,7 +138,7 @@ async function cekRSS(link) {
                     })),
                 });
             } else {
-                resolve('notmodified');
+                resolve('notmodified-noitems');
             }
         });
     });
@@ -156,7 +160,7 @@ setInterval(async () => {
             try {
                 const res = await cekRSS(link);
                 console.log('rss', 3, link, res);
-                if (res === 'notmodified') continue;
+                if (res.startsWith?.('notmodified')) continue;
                 IPC.kirimSinyal('PR', {
                     rss: {
                         c: chat,

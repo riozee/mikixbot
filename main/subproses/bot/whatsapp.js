@@ -289,26 +289,26 @@ async function kirimPesan(pesan) {
     log(4, pesan);
     const $ = pesan._;
     const penerima = ID($.penerima);
-    if (cache.cekizin[penerima] === 'n') return { _e: 'notallowed' };
+    if (cache.cekizin[penerima] === 'n') return { s: false, _e: 'notallowed' };
     if (!cache.cekizin[penerima]) {
         if (penerima.endsWith('@g.us')) {
             try {
                 const { announce } = await bot.groupMetadata(penerima);
                 if (announce) {
                     cache.cekizin[penerima] = 'n';
-                    return { _e: 'notallowed' };
+                    return { s: false, _e: 'notallowed' };
                 }
             } catch (e) {
                 if (String(e).includes('item-not-found')) {
                     cache.cekizin[penerima] = 'n';
-                    return { _e: 'notallowed' };
+                    return { s: false, _e: 'notallowed' };
                 }
                 console.log(e);
             }
         } else {
             if (cache.blocklist.includes(penerima)) {
                 cache.cekizin[penerima] = 'n';
-                return { _e: 'notallowed' };
+                return { s: false, _e: 'notallowed' };
             }
         }
         cache.cekizin[penerima] = 'a';

@@ -70,6 +70,10 @@ async function proses(pesan) {
         i: u?.bindto ? (await DB.cari({ _id: u?.bindto })).hasil : null,
     };
 
+    const system = (await DB.cari({ _id: 'system' })).hasil;
+    if (!system) await DB.buat({ _id: 'system' });
+    data.s = system ? system : {};
+
     const $ = pesan._;
     $.platform = pesan.d;
     $.bahasa = data.c?.lang || data.i?.lang || 'id';
@@ -169,8 +173,10 @@ async function bind($, data) {
 
 async function simsimi($, data) {
     if (cache.data.simsimi[$.pengirim].expiration < Date.now()) {
+        const limit = cekLimit($, data);
+        if (cache.data.simsimi[$.pengirim].done > 0 && limit.val > 0) limit.kurangi();
         delete cache.data.simsimi[$.pengirim];
-        return;
+        return kirimPesan($.pengirim, { teks: $.TEKS('command/simsimi/off'), saran: ['/simsimi'] });
     }
     if ($.teks && Math.random() > 0.25) {
         try {
@@ -194,6 +200,7 @@ async function simsimi($, data) {
                 }, _.random(0, 5000));
             });
             if (s === false) throw _e;
+            cache.data.simsimi[$.pengirim].done++;
         } catch (e) {
             const errId = Math.random().toString(36).slice(2).toUpperCase();
             cache.data.errors ||= {};
@@ -2611,16 +2618,22 @@ const Perintah = {
         cat: 'fun',
         lang: ['id'],
         lim: true,
-        fn: ($, data) => {
-            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
+        fn: async ($, data) => {
+            if ($.pengirim.endsWith('#C')) {
+                if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+            }
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
             cache.data.simsimi ||= {};
             if (cache.data.simsimi[$.pengirim]) {
+                if (cache.data.simsimi[$.pengirim].done > 0 && limit.val > 0) limit.kurangi();
                 delete cache.data.simsimi[$.pengirim];
                 return { teks: $.TEKS('command/simsimi/off'), saran: ['/simsimi'] };
             } else {
                 cache.data.simsimi[$.pengirim] = {
                     initiator: $.uid,
-                    expiration: data.i.expiration,
+                    expiration: data.i?.expiration || Date.now() + 60000 * 5,
+                    done: 0,
                 };
                 return { teks: $.TEKS('command/simsimi/on'), saran: ['/simsimi'] };
             }
@@ -2670,6 +2683,8 @@ const Perintah = {
         fn: async ($, data) => {
             if ($.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/privateonly') };
             if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!cekPremium($, data) && (await DB.cari({ bindto: $.id }, true)).hasil?.filter?.((v) => v._id !== $.uid)?.length > 3)
+                return { teks: $.TEKS('command/bind/limit') };
             let force = false;
             if ($.argumen) {
                 if ($.argumen !== 'FORCE') return;
@@ -2984,7 +2999,7 @@ const Perintah = {
         stx: '/bahasapurba [text]',
         cat: 'fun',
         lang: ['id'],
-        fn: async ($, data, { endpoint, name }) => {
+        fn: async ($, data, { endpoint, name } = {}) => {
             if (!$.arg) return { teks: $.TEKS(name ? 'command/' + name : 'command/bahasapurba') };
             const res = await (await lolHumanAPI(endpoint || 'bahasapurba', 'text=' + encodeURI($.arg))).json();
             if (res.status != 200) throw res.message;
@@ -3084,7 +3099,9 @@ const Perintah = {
     addrss: {
         stx: '/addRSS [link]',
         cat: 'rss',
+        lim: true,
         fn: async ($, data) => {
+            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
             if ($.pengirim.endsWith('#C') && !data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
             if (!$.pengirim.endsWith('#C') && !$.id) return { teks: $.TEKS('permission/registeredonly') };
             if (!$.args[0]) return { teks: $.TEKS('command/addrss') };
@@ -3107,7 +3124,9 @@ const Perintah = {
     rsslist: {
         stx: '/RSSlist',
         cat: 'rss',
+        lim: true,
         fn: async ($) => {
+            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
             const { _e, hasil } = await DB.cari({ _id: $.pengirim });
             if (_e) throw _e;
             if (!hasil.rss) return { teks: $.TEKS('command/rsslist/notfound') };
@@ -3119,7 +3138,9 @@ const Perintah = {
     deleterss: {
         stx: '/deleteRSS',
         cat: 'rss',
+        lim: true,
         fn: async ($) => {
+            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
             if (!$.args[0] || isNaN(parseInt($.args[0]))) return { teks: $.TEKS('command/deleterss') };
             const idx = parseInt($.args[0]) - 1;
             const { h, l, _e } = await IPC.kirimKueri('RS', {
@@ -3140,6 +3161,7 @@ const Perintah = {
             if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
             if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
             if (!(await isOwner($))) return { teks: $.TEKS('permission/owneronly') };
+            if (!cekPremium($, data) && data.i.groups?.length > 3) return { teks: $.TEKS('command/addgroup/limit') };
             const { _e } = await DB.perbarui({ _id: $.id }, { $push: { groups: data.c.id } });
             if (_e) throw _e;
             return { teks: $.TEKS('command/addgroup/done') };
