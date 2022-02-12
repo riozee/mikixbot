@@ -89,6 +89,7 @@ function mulai() {
                 pengirim: uid === cid ? IDPengguna(uid) : IDChat(cid),
                 uid: IDPengguna(uid),
                 mid: pesan.key.id,
+                name: pesan.pushName,
             };
             if (uid !== cid && !cache.namagrup[cid]) cache.namagrup[cid] = (await bot.groupMetadata(cid)).subject;
             $pesan.gname = cache.namagrup[cid];
@@ -116,6 +117,7 @@ function mulai() {
                     _.video = {
                         id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video`,
                         ukuran: Number(isi.fileLength),
+                        durasi: isi.seconds * 1000,
                         eks: 'mp4',
                         gif: isi.gifPlayback,
                     };
@@ -128,6 +130,7 @@ function mulai() {
                     _.audio = {
                         id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|audio`,
                         ukuran: Number(isi.fileLength),
+                        durasi: isi.seconds * 1000,
                         eks: 'mp3',
                     };
                 } else if (tipe === 'documentMessage') {
@@ -184,6 +187,7 @@ function mulai() {
                         _.video = {
                             id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|video`,
                             ukuran: Number(isi.fileLength),
+                            durasi: isi.seconds * 1000,
                             eks: 'mp4',
                             wa_view_once: true,
                         };
@@ -360,11 +364,13 @@ async function kirimPesan(pesan) {
         else if ($.audio) {
             if ($.teks) {
                 if ($.audio.id) omsg = await bot.sendMessage(penerima, { audio: { url: await unduhMedia($.audio) } }, opsi);
-                else if ($.audio.file || $.audio.url) omsg = await bot.sendMessage(penerima, { audio: { url: $.audio.file || $.audio.url } }, opsi);
+                else if ($.audio.file || $.audio.url)
+                    omsg = await bot.sendMessage(penerima, { audio: { url: $.audio.file || $.audio.url }, mimetype: 'audio/mpeg' }, opsi);
                 msg.text = $.teks;
             } else {
                 if ($.audio.id) msg.audio = { url: await unduhMedia($.audio) };
                 else if ($.audio.file || $.audio.url) msg.audio = { url: $.audio.file || $.audio.url };
+                msg.mimetype = 'audio/mpeg';
             }
         }
 

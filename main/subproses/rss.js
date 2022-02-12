@@ -154,12 +154,11 @@ process.on('message', (pesan) => {
     });
 });
 
-setInterval(async () => {
+async function x() {
     for (const { rss, chat } of RSS) {
         for (const link of rss) {
             try {
                 const res = await cekRSS(link);
-                console.log('rss', 3, link, res);
                 if (res.startsWith?.('notmodified')) continue;
                 IPC.kirimSinyal('PR', {
                     rss: {
@@ -186,7 +185,10 @@ setInterval(async () => {
             }
         }
     }
-}, 60000);
+    setTimeout(x, 60000 * 5);
+}
+
+x();
 
 if (creds.watch) {
     require('fs').watch(__filename, () => {

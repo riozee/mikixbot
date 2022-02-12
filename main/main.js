@@ -23,6 +23,7 @@ const subproses = [
     './main/subproses/database.js',
     './main/subproses/perintah.js',
     './main/subproses/rss.js',
+    './main/subproses/statistic.js',
     './main/subproses/bot/whatsapp.js',
     './main/subproses/bot/telegram.js',
 ];
@@ -62,6 +63,8 @@ async function main(pesan) {
         teruskanKe('./main/subproses/bot/whatsapp.js', pesan);
     } else if (pesan.endsWith('RS')) {
         teruskanKe('./main/subproses/rss.js', pesan);
+    } else if (pesan.endsWith('ST')) {
+        teruskanKe('./main/subproses/statistic.js', pesan);
     }
 
     //////////////////////////////

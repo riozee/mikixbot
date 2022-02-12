@@ -15,8 +15,8 @@ const webp = require('../alat/webp_konversi');
 
 //////////////////// VARS
 
-const pid = Math.random().toString(36).slice(2);
 const creds = JSON.parse(fs.readFileSync('./creds.json'));
+const admin = creds.tg_admin_id;
 const TEKS = {};
 
 for (const file of fs.readdirSync('./res/teks')) {
@@ -55,6 +55,7 @@ async function rss(rss) {
         };
         kirimPesan(rss.c, {
             teks: TEKS['en']['rss/fail'].replace('%link', rss.fail.link).replace('%err', errId),
+            saran: ['/addrss ' + rss.fail.link, '/report ' + errId],
         });
     }
 }
@@ -76,7 +77,7 @@ async function proses(pesan) {
 
     const $ = pesan._;
     $.platform = pesan.d;
-    $.bahasa = data.c?.lang || data.i?.lang || 'id';
+    $.bahasa = data.c?.lang || ($.pengirim.endsWith('#C') ? 0 : data.i?.lang) || 'id';
     $.TEKS = (teks) => TEKS[$.bahasa][teks];
     $.id = data.i ? data.i._id : null;
     if ($.platform === 'TG' && $.id && data.u.tg_name !== $.tg_name) {
@@ -94,29 +95,44 @@ async function proses(pesan) {
     if ($.migrateChatID) {
         kirimPesan($.penerima, {
             teks: $.TEKS('system/migratedchatid'),
+            saran: ['/registergroup', '/contacts admin'],
         });
     }
     ////////// ANONYMOUS CHAT
     else if (!$.pengirim.endsWith('#C') && cache.data.anch?.active?.includes?.($.uid)) {
+        if (cache.data.broadcast?.length) await broadcast(pesan);
         anch(pesan, data);
     }
     ////////// INPUT
     else if (cache.data.waiter && cache.data.waiter[$.uid] && cache.data.waiter[$.uid]._in === $.pengirim) {
+        if (cache.data.broadcast?.length) await broadcast(pesan);
         waiter($, data);
     }
     ////////// PERINTAH
     else if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&\:.][a-zA-Z0-9]+\s*/.test($.teks)) {
         perintah(pesan, data);
     }
-
     ////////// BIND
     else if (!$.pengirim.endsWith('#C') && $.teks && $.teks.startsWith('bind:code=') && /^bind:code=[a-z0-9]+$/.test($.teks)) {
+        if (cache.data.broadcast?.length) await broadcast(pesan);
         bind($, data);
     }
-
     ////////// SIMSIMI
     else if ((cache.data.simsimi ||= {})[$.pengirim]) {
+        if (cache.data.broadcast?.length) await broadcast(pesan);
         simsimi($, data);
+    }
+}
+
+async function broadcast(pesan) {
+    const $ = pesan._;
+    for (const b of cache.data.broadcast) {
+        if (b.terjangkau.includes($.uid)) continue;
+        await _kirimPesan($.pengirim, {
+            teks: $.TEKS('command/broadcast/label') + b.teks,
+            gambar: b.gambar ? { url: b.gambar } : undefined,
+        });
+        b.terjangkau.push($.uid);
     }
 }
 
@@ -137,6 +153,7 @@ async function bind($, data) {
                         }
                         return kirimPesan(b.uid, {
                             teks: $.TEKS('command/bind/success'),
+                            saran: ['/bind'],
                         });
                     } else {
                         cache.data.binds.splice(_.findIndex(cache.data.binds, { code: b.code }), 1);
@@ -152,6 +169,7 @@ async function bind($, data) {
                     if (h._e) throw h._e;
                     return kirimPesan(b.uid, {
                         teks: $.TEKS('command/bind/success'),
+                        saran: ['/bind'],
                     });
                 }
             } catch (e) {
@@ -165,6 +183,7 @@ async function bind($, data) {
                 };
                 kirimPesan(b.uid, {
                     teks: $.TEKS('system/error').replace('%e', errId),
+                    saran: ['/report ' + errId],
                 });
             }
         } else continue;
@@ -213,7 +232,7 @@ async function simsimi($, data) {
                 teks: $.TEKS('command/simsimi/error').replace('%err', errId),
                 re: true,
                 mid: $.mid,
-                tg_no_remove_keyboard: true,
+                saran: ['/report ' + errId],
             });
         }
     }
@@ -269,6 +288,7 @@ async function waiter($, data) {
             re: true,
             mid: $.mid,
             teks: $.TEKS('system/error').replace('%e', errId),
+            saran: ['/report ' + errId],
         };
         kirimPesan($.pengirim, hasil);
         for (const id in cache.data.errors) {
@@ -368,7 +388,7 @@ async function anch(pesan, data) {
                     msg.teks = $.teks;
                 } else if ($.stiker) {
                     const file = await IPC.kirimKueri('WA', { unduh: $.stiker });
-                    if ($.stiker.animasi) {
+                    if ($.q.stiker.animasi) {
                         const gif = await webp.keGif(file.file);
                         msg.video = {
                             file: gif,
@@ -470,11 +490,12 @@ async function validasiUser($, data) {
     if (!cdcmd[$.uid]) cdcmd[$.uid] = 0;
     if (!data.i || data.i.premlvl === 0 || Date.now() > data.i.expiration) {
         // FREE USER
-        if (Date.now() - cdcmd[$.uid] < 5000) r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5') };
+        if (Date.now() - cdcmd[$.uid] < 5000)
+            r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5'), saran: ['/pricing'] };
     } else {
         if (data.i.premlvl === 1) {
             // PREMIUM LITE
-            if (Date.now() - cdcmd[$.uid] < 1500) r = { teks: $.TEKS('user/cdcommandreached').replace('%lvl', 'Premium Lite').replace('%dur', '1.5') };
+            if (Date.now() - cdcmd[$.uid] < 5000) r = { teks: $.TEKS('user/cdcommandreached').replace('%lvl', 'Premium Lite').replace('%dur', '5'), saran: ['/pricing'] };
         } else if (data.i.premlvl === 2) {
             // PREMIUM XTREME
         }
@@ -492,14 +513,14 @@ function cekLimit($, data) {
     const usrlimit = cache.data.usrlimit;
     if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
     return {
-        val: cekPremium($, data) ? Infinity : usrlimit[$.id] ?? (usrlimit[$.id] = 1),
+        val: cekPremium($, data) ? Infinity : usrlimit[$.id] ?? (usrlimit[$.id] = 2),
         kurangi: () => {
             if (!data.i?.premlvl && usrlimit[$.id || $.uid] > 0) {
                 usrlimit[$.id || $.uid] -= 1;
-                return kirimPesan($.pengirim, { teks: $.TEKS('user/limitnotice').replace('%lim', usrlimit[$.id || $.uid]), re: true, mid: $.mid });
+                return kirimPesan($.pengirim, { teks: $.TEKS('user/limitnotice').replace('%lim', usrlimit[$.id || $.uid]), re: true, mid: $.mid, saran: ['/pricing'] });
             }
         },
-        habis: { teks: $.TEKS('user/limitreached') },
+        habis: { teks: $.TEKS('user/limitreached'), saran: ['/pricing'] },
     };
 }
 
@@ -521,7 +542,7 @@ function cekWaiter($) {
         hapus: () => delete cache.data.waiter[$.uid],
         notice: (cmd, d) => ({
             teks: $.TEKS('user/dialognotice').replace('%cmd', cmd).replace('%d', d),
-            tg_no_remove_keyboard: true,
+            saran: ['/' + cmd],
         }),
         belum: (pesan) => ({
             ...pesan,
@@ -556,6 +577,8 @@ async function perintah(pesan, data) {
     log(2, $.teks);
 
     if (Perintah.hasOwnProperty($.perintah)) {
+        stats.cmds($.perintah);
+        if (cache.data.broadcast?.length) await broadcast(pesan);
         let r;
         if ((r = await validasiUser($, data))) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
 
@@ -594,6 +617,7 @@ async function perintah(pesan, data) {
             const hasil = {
                 ...msg,
                 teks: $.TEKS('system/error').replace('%e', errId),
+                saran: ['/report ' + errId],
             };
             logPesan(pesan.d, hasil, true);
             kirimPesan($.pengirim, hasil);
@@ -616,6 +640,7 @@ const Perintah = {
         fn: ($) => {
             return {
                 teks: $.TEKS('command/about'),
+                saran: ['/contacts', '/help', '/menu'],
             };
         },
     },
@@ -623,7 +648,7 @@ const Perintah = {
         stx: '/anext',
         cat: 'anonymouschat',
         fn: ($) => {
-            return { teks: $.TEKS('anonymouschat/notinanyroom') };
+            return { teks: $.TEKS('anonymouschat/notinanyroom'), saran: ['/asearch'] };
         },
     },
     asearch: {
@@ -660,16 +685,13 @@ const Perintah = {
                 _.pull(cache.data.anch.ready, $.uid);
                 return { teks: $.TEKS('anonymouschat/findingpartnercancelled') };
             }
-            return { teks: $.TEKS('anonymouschat/notinanyroom') };
+            return { teks: $.TEKS('anonymouschat/notinanyroom'), saran: ['/asearch'] };
         },
     },
     audioonly: {
         stx: '/audioonly',
         cat: 'converter',
-        lim: true,
         fn: async ($, data) => {
-            const limit = cekLimit($, data);
-            if (limit.val === 0) return limit.habis;
             let media;
             if ($.video || $.q?.video) {
                 media = $.video || $.q?.video;
@@ -688,7 +710,7 @@ const Perintah = {
                     resolve(out);
                 });
             });
-            return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') }, _limit: limit };
+            return { dokumen: { file: output, mimetype: 'audio/mp3', namaFile: media.namaFile ? media.namaFile + '.mp3' : output.replace('./tmp/', '') } };
         },
     },
     eval: {
@@ -703,6 +725,7 @@ const Perintah = {
             if (!$.argumen) {
                 return {
                     teks: $.TEKS('command/eval'),
+                    saran: ['/menu', '/help'],
                 };
             }
             let hasil;
@@ -737,15 +760,24 @@ const Perintah = {
         hd: (waiter, $) => {
             if ($.teks) {
                 if ($.perintah === 'cancel') {
-                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban) });
+                    return waiter.selesai({
+                        teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban),
+                        saran: ['/' + (waiter.val.gamename || 'asahotak')],
+                    });
                 }
                 if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
-                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban) });
+                    return waiter.selesai({
+                        teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban),
+                        saran: ['/' + (waiter.val.gamename || 'asahotak')],
+                    });
                 } else {
                     if (--waiter.val.retries > 0) {
-                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) });
+                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries), saran: ['/cancel'] });
                     } else {
-                        return waiter.selesai({ teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban) });
+                        return waiter.selesai({
+                            teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban),
+                            saran: ['/' + (waiter.val.gamename || 'asahotak')],
+                        });
                     }
                 }
             } else {
@@ -772,15 +804,24 @@ const Perintah = {
         hd: (waiter, $) => {
             if ($.teks) {
                 if ($.perintah === 'cancel') {
-                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) });
+                    return waiter.selesai({
+                        teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`),
+                        saran: ['/caklontong'],
+                    });
                 }
                 if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
-                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/correct').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) });
+                    return waiter.selesai({
+                        teks: $.TEKS('command/$gamequestion/correct').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`),
+                        saran: ['/caklontong'],
+                    });
                 } else {
                     if (--waiter.val.retries > 0) {
-                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) });
+                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries), saran: ['/cancel'] });
                     } else {
-                        return waiter.selesai({ teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`) });
+                        return waiter.selesai({
+                            teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', `${waiter.val.jawaban}\n${waiter.val.deskripsi}`),
+                            saran: ['/caklontong'],
+                        });
                     }
                 }
             } else {
@@ -838,34 +879,42 @@ const Perintah = {
         stx: '/getGroupID',
         cat: 'bot',
         fn: ($, data) => {
-            return { teks: data.c?.id || $.TEKS('permission/registeredgrouponly') };
+            return { teks: data.c?.id || $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
         },
     },
     getuserid: {
         stx: '/getUserID',
         cat: 'bot',
         fn: ($) => {
-            return { teks: $.id || $.TEKS('command/getuserid/null') };
+            return { teks: $.id || $.TEKS('command/getuserid/null'), saran: $.id ? undefined : ['/register ' + $.name, '/menu bot'] };
         },
     },
     help: {
         stx: '/help',
         cat: 'bot',
-        aliasfor: 'menu',
-        fn: ($) => Perintah.menu.fn($),
+        fn: ($) => {
+            return {
+                teks: $.TEKS('command/help'),
+                saran: ['/menu'],
+            };
+        },
     },
     start: {
         stx: '/start',
         cat: 'bot',
-        aliasfor: 'menu',
-        fn: ($) => Perintah.menu.fn($),
+        fn: ($) => {
+            return {
+                teks: $.TEKS('command/start'),
+                saran: ['/about', '/help', '/menu', '/contacts'],
+            };
+        },
     },
     kbbi: {
         stx: '/KBBI [q]',
         cat: 'searchengine',
         lang: ['id'],
         fn: async ($) => {
-            if (!$.arg) return { teks: $.TEKS('command/kbbi') };
+            if (!$.arg) return { teks: $.TEKS('command/kbbi'), saran: ['/menu searching', '/help'] };
             try {
                 const [ANTONIM, GABUNGANKATA, KATATURUNAN, ARTI, PERIBAHASA, TERKAIT, LIHATJUGA, SINONIM, TRANSLASI] = $.TEKS('command/kbbi/$words')
                     .split('|')
@@ -940,6 +989,7 @@ const Perintah = {
             } else {
                 return {
                     teks: $.TEKS('command/lowercase'),
+                    saran: ['/menu tools', '/help'],
                 };
             }
         },
@@ -948,24 +998,73 @@ const Perintah = {
         stx: '/menu',
         cat: 'bot',
         fn: ($) => {
-            return {
-                teks: $.TEKS('command/menu').replace('%', listPerintah($.TEKS('command/menu/$categories'), Perintah, $.bahasa).teks),
-            };
+            const a = $.argumen.replace(/[^a-z]/gi, '').toLowerCase();
+            const b = (c) => ({ teks: $.TEKS('command/menu/' + c), tg_no_remove_keyboard: true });
+            if (
+                a === 'anonymouschat' ||
+                a === 'shop' ||
+                a === 'multiaccount' ||
+                a === 'converter' ||
+                a === 'fun' ||
+                a === 'downloader' ||
+                a === 'information' ||
+                a === 'searching' ||
+                a === 'tools' ||
+                a === 'randomimage' ||
+                a === 'game' ||
+                a === 'reaction' ||
+                a === 'rss' ||
+                a === 'bot'
+            )
+                return b(a);
+            else
+                return {
+                    teks: $.TEKS('command/menu'),
+                    saran: [
+                        '/start',
+                        '/help',
+                        ..._.shuffle([
+                            '/menu anonymouschat',
+                            '/menu shop',
+                            '/menu multiaccount',
+                            '/menu converter',
+                            '/menu fun',
+                            '/menu downloader',
+                            '/menu information',
+                            '/menu searching',
+                            '/menu tools',
+                            '/menu randomimage',
+                            '/menu game',
+                            '/menu reaction',
+                            '/menu rss',
+                            '/menu bot',
+                        ]),
+                    ],
+                };
         },
     },
     pricing: {
         stx: '/pricing',
         cat: 'bot',
         fn: ($) => {
-            return { teks: $.TEKS('command/pricing') };
+            return { teks: $.TEKS('command/pricing'), gambar: { url: 'https://telegra.ph/file/dc4bee30e0ef93a9ef44e.jpg' }, saran: ['/contacts'] };
+        },
+    },
+    contacts: {
+        stx: '/contacts',
+        cat: 'bot',
+        fn: ($) => {
+            return {
+                teks: $.TEKS('command/contacts'),
+            };
         },
     },
     register: {
         stx: '/register [name]',
         cat: 'bot',
         fn: async ($, data) => {
-            if ($.id) return { teks: $.TEKS('command/register/alreadyregistered') };
-            if (!$.argumen || $.argumen.length > 25) return { teks: $.TEKS('command/register') };
+            if ($.id) return { teks: $.TEKS('command/register/alreadyregistered'), saran: ['/setname', '/getuserid'] };
+            if (!$.argumen || $.argumen.length > 25) return { teks: $.TEKS('command/register'), saran: ['/register ' + $.name, '/menu bot', '/help'] };
             const id = 'U-' + Math.random().toString(36).slice(2).toUpperCase();
             let h = await DB.buat({
                 _id: id,
@@ -989,7 +1088,7 @@ const Perintah = {
         cat: 'bot',
         fn: async ($, data) => {
             if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
-            if (data.c) return { teks: $.TEKS('command/registergroup/alreadyregistered') };
+            if (data.c) return { teks: $.TEKS('command/registergroup/alreadyregistered'), saran: ['/getgroupid'] };
             const id = 'G-' + Math.random().toString(36).slice(2).toUpperCase();
             let h = await DB.buat({
                 _id: $.pengirim,
@@ -1011,6 +1110,7 @@ const Perintah = {
             } else {
                 return {
                     teks: $.TEKS('command/reversetext'),
+                    saran: ['/menu tools', '/help'],
                 };
             }
         },
@@ -1028,11 +1128,11 @@ const Perintah = {
         stx: '/setname [name]',
         cat: 'bot',
         fn: async ($, data) => {
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
-            if (!$.argumen || $.argumen.length > 25) return { teks: $.TEKS('command/setname') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
+            if (!$.argumen || $.argumen.length > 25) return { teks: $.TEKS('command/setname'), saran: ['/setname ' + $.name, '/menu bot', '/help'] };
             const { _e } = await DB.perbarui({ _id: $.id }, { $set: { name: $.argumen } });
             if (_e) throw _e;
-            return { teks: $.TEKS('command/setname/done').replace('%old', data.i.name).replace('%new', $.argumen) };
+            return { teks: $.TEKS('command/setname/done').replace('%old', data.i.name).replace('%new', $.argumen), saran: ['/myprofile'] };
         },
     },
     setlanguage: {
@@ -1040,18 +1140,29 @@ const Perintah = {
         cat: 'bot',
         fn: async ($, data) => {
             if ($.pengirim.endsWith('#C')) {
-                if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
+                if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
                 if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
             } else {
-                if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+                if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
             }
             const langs = Object.keys(TEKS);
             if (!$.args[0]) return { teks: $.TEKS('command/setlanguage') };
             $.args[0] = $.args[0].toLowerCase();
-            if (!langs.includes($.args[0])) return { teks: $.TEKS('command/command/setlanguage') };
+            if (!langs.includes($.args[0])) return { teks: $.TEKS('command/command/setlanguage'), saran: ['/languages', '/menu bot', '/help'] };
             const { _e } = await DB.perbarui({ _id: $.pengirim.endsWith('#C') ? $.pengirim : $.id }, { $set: { lang: $.args[0] } });
             if (_e) throw _e;
             return { teks: TEKS[$.args[0]]['command/setlanguage/done'].replace('%lang', $.args[0]) };
+        },
+    },
+    languages: {
+        stx: '/languages',
+        cat: 'bot',
+        fn: ($) => {
+            const languages = Object.keys(TEKS);
+            return {
+                teks: $.TEKS('command/languages'),
+                saran: _.shuffle(languages).map((v) => `/setlanguage ${v.toUpperCase()}`),
+            };
         },
     },
     setpremiumuser: {
@@ -1096,32 +1207,28 @@ const Perintah = {
         stx: '/sticker',
         cat: 'converter',
         fn: async ($) => {
-            if (!$.pengirim.startsWith('WA#')) return { teks: $.TEKS('command/sticker/onlywhatsapp') };
             if ($.gambar || $.q?.gambar) {
                 const gambar = $.gambar || $.q?.gambar;
-                if (gambar.ukuran > 1000000) return { teks: $.TEKS('command/sticker/sizetoolarge') };
+                if (gambar.ukuran > 1_500_000) return { teks: $.TEKS('command/sticker/sizetoolarge') };
                 const { file, _e } = await unduh($.pengirim, gambar);
                 if (_e) throw _e;
-                let _webp = await webp.keWebp(file, 'jpg');
-                _webp = await webp.setExif(_webp, 'Miki Bot', 'multiplatform chatbot by RiozeC');
+                let _webp = await webp.keWebp(file, 'jpg', $.argumen || '', creds.lolHumanAPIkey);
                 return { stiker: { file: _webp } };
             } else if ($.video || $.q?.video) {
                 const video = $.video || $.q?.video;
-                if (video.ukuran > 1000000) return { teks: $.TEKS('command/sticker/sizetoolarge') };
+                if (video.ukuran > 1_500_000) return { teks: $.TEKS('command/sticker/sizetoolarge') };
                 const { file, _e } = await unduh($.pengirim, video);
                 if (_e) throw _e;
-                let _webp = await webp.keWebp(file, 'mp4');
-                _webp = await webp.setExif(_webp, 'Miki Bot', 'multiplatform chatbot by RiozeC');
+                let _webp = await webp.keWebp(file, 'mp4', $.argumen || '', creds.lolHumanAPIkey);
                 return { stiker: { file: _webp } };
             } else if ($.dokumen || $.q?.dokumen) {
                 const dokumen = $.dokumen || $.q?.dokumen;
-                if (dokumen.ukuran > 1000000) return { teks: $.TEKS('command/sticker/sizetoolarge') };
+                if (dokumen.ukuran > 1_500_000) return { teks: $.TEKS('command/sticker/sizetoolarge') };
                 if (!['jpg', 'png', 'gif', 'mp4', 'webp', 'mpeg', 'avi', 'ogv', 'webm', '3gp'].includes(dokumen.eks))
                     return { teks: $.TEKS('command/sticker/documentnotsupported') };
                 const { file, _e } = await unduh($.pengirim, dokumen);
                 if (_e) throw _e;
-                let _webp = await webp.keWebp(file, dokumen.eks);
-                _webp = await webp.setExif(_webp, 'Miki Bot', 'multiplatform chatbot by RiozeC');
+                let _webp = await webp.keWebp(file, dokumen.eks, $.argumen || '', creds.lolHumanAPIkey);
                 return { stiker: { file: _webp } };
             } else {
                 return { teks: $.TEKS('command/sticker/nomedia') };
@@ -1134,17 +1241,16 @@ const Perintah = {
         fn: async ($) => {
             if ($.stiker || $.q?.stiker) {
                 const stiker = $.stiker || $.q?.stiker;
+                if (stiker.tg_animated_sticker) return { teks: $.TEKS('command/unsticker/animatedstickertelegramnotsupported') };
                 if (stiker.animasi) {
-                    if ($.platform === 'TG') return { teks: $.TEKS('command/unsticker/animatedstickertelegramnotsupported') };
                     const { file, _e } = await unduh($.pengirim, stiker);
                     if (_e) throw _e;
-                    let output = await webp.keGif(file);
-                    output = await gif.keMp4(output);
+                    let output = await webp.keMp4(file, creds.lolHumanAPIkey);
                     return { video: { file: output, gif: true } };
                 } else {
                     const { file, _e } = await unduh($.pengirim, stiker);
                     if (_e) throw _e;
-                    const output = await webp.kePng(file);
+                    const output = await webp.kePng(file, creds.lolHumanAPIkey);
                     return { gambar: { file: output } };
                 }
             } else {
@@ -1163,6 +1269,7 @@ const Perintah = {
             } else {
                 return {
                     teks: $.TEKS('command/uppercase'),
+                    saran: ['/menu tools', '/help'],
                 };
             }
         },
@@ -1171,7 +1278,7 @@ const Perintah = {
         stx: '/google [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/google') };
+            if (!$.argumen) return { teks: $.TEKS('command/google'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('gsearch', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             return { teks: res.result.map((v) => `• ${v.title}\n${v.link}\n${v.desc}`).join('\n\n') };
@@ -1181,7 +1288,7 @@ const Perintah = {
         stx: '/playstore [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/playstore') };
+            if (!$.argumen) return { teks: $.TEKS('command/playstore'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('playstore', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             return {
@@ -1193,7 +1300,7 @@ const Perintah = {
         stx: '/youtube [q]',
         cat: 'searchengine',
         fn: async ($, data) => {
-            if (!$.argumen) return { teks: $.TEKS('command/youtube') };
+            if (!$.argumen) return { teks: $.TEKS('command/youtube'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('ytsearch', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             return {
@@ -1209,8 +1316,8 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/ytaudio') };
-            if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytaudio') };
+            if (!$.argumen) return { teks: $.TEKS('command/ytaudio'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytaudio'), saran: ['/menu downloader', '/help'] };
             $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const res = await (await lolHumanAPI('ytaudio', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
@@ -1247,8 +1354,8 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/ytvideo') };
-            if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytvideo') };
+            if (!$.argumen) return { teks: $.TEKS('command/ytvideo'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/.test($.argumen)) return { teks: $.TEKS('command/ytvideo'), saran: ['/menu downloader', '/help'] };
             $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const res = await (await lolHumanAPI('ytvideo', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
@@ -1283,7 +1390,7 @@ const Perintah = {
         cat: 'information',
         lang: ['id'],
         fn: async ($) => {
-            if (!$.args[0]) return { teks: $.TEKS('command/jadwaltv') };
+            if (!$.args[0]) return { teks: $.TEKS('command/jadwaltv'), saran: ['/menu information', '/help'] };
             $.args[0] = $.args[0].toLowerCase();
             if ($.args[0] === 'now') return { teks: $.TEKS('command/jadwaltv/notfound') };
             const res = await (await lolHumanAPI('jadwaltv/' + encodeURI($.args[0].toLowerCase()))).json();
@@ -1317,7 +1424,8 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.|m\.|web\.|mbasic\.)?(facebook|fb)\.(com|watch)/.test($.argumen)) return { teks: $.TEKS('command/fbvideo') };
+            if (!/^(https?:\/\/)?(www\.|m\.|web\.|mbasic\.)?(facebook|fb)\.(com|watch)/.test($.argumen))
+                return { teks: $.TEKS('command/fbvideo'), saran: ['/menu downloader', '/help'] };
             $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const res = await (await lolHumanAPI('facebook', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
@@ -1409,7 +1517,7 @@ const Perintah = {
         stx: '/googleimage [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/googleimage') };
+            if (!$.argumen) return { teks: $.TEKS('command/googleimage'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('gimage2', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) {
                 const f = await lolHumanAPI('gimage', 'query=' + encodeURI($.argumen));
@@ -1435,7 +1543,7 @@ const Perintah = {
         stx: '/pinterest [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/pinterest') };
+            if (!$.argumen) return { teks: $.TEKS('command/pinterest'), saran: ['/menu searching', '/help'] };
             let res = await (await lolHumanAPI('pinterest2', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) res = await (await lolHumanAPI('pinterest', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
@@ -1451,7 +1559,7 @@ const Perintah = {
         cat: 'searchengine',
         lang: ['id'],
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/katabijak') };
+            if (!$.argumen) return { teks: $.TEKS('command/katabijak'), saran: ['/menu searching', '/help'] };
             let res = await (await lolHumanAPI('searchbijak', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const result = _.sample(res.result);
@@ -1824,7 +1932,7 @@ const Perintah = {
         stx: '/anime [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/anime') };
+            if (!$.argumen) return { teks: $.TEKS('command/anime'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('anime', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const _ = res.result;
@@ -1846,7 +1954,7 @@ const Perintah = {
         stx: '/manga [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/manga') };
+            if (!$.argumen) return { teks: $.TEKS('command/manga'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('manga', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const _ = res.result;
@@ -1866,7 +1974,7 @@ const Perintah = {
         stx: '/animangachar [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/animangachar') };
+            if (!$.argumen) return { teks: $.TEKS('command/animangachar'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('character', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const _ = res.result;
@@ -1903,6 +2011,7 @@ const Perintah = {
                         .replace('%at', res.result.at)
                         .replace('%eps', res.result.episode),
                     _limit: limit,
+                    saran: ['/anime ' + res.result.title_english],
                 };
             } else {
                 return {
@@ -1933,6 +2042,7 @@ const Perintah = {
                         .replace('%part', res.result[0].part)
                         .replace('%urls', res.result[0].urls.join('\n')),
                     _limit: limit,
+                    saran: ['/manga ' + res.result[0].title],
                 };
             } else {
                 return {
@@ -1949,7 +2059,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/otakudesu') };
+            if (!$.argumen) return { teks: $.TEKS('command/otakudesu'), saran: ['/menu searching', '/help'] };
             let res;
             if (/^(https?:\/\/)?(www\.)?otakudesu\.moe\//.test($.argumen.trim())) {
                 res = await (await lolHumanAPI('otakudesu', 'url=' + encodeURI($.argumen.trim()))).json();
@@ -1999,7 +2109,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/kusonime') };
+            if (!$.argumen) return { teks: $.TEKS('command/kusonime'), saran: ['/menu downloader', '/help'] };
             let res;
             if (/^(https?:\/\/)?(www\.)?kusonime\.com\//.test($.argumen.trim())) {
                 res = await (await lolHumanAPI('kusonime', 'url=' + encodeURI($.argumen.trim()))).json();
@@ -2033,6 +2143,7 @@ const Perintah = {
                             )
                             .join('\n\n')
                     ),
+                _limit: limit,
             };
         },
     },
@@ -2044,7 +2155,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/lk21') };
+            if (!$.argumen) return { teks: $.TEKS('command/lk21'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('lk21', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             return {
@@ -2073,8 +2184,8 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/jooxdl') };
-            if (!/^(https?:\/\/)?(www\.)?joox\.com\//.test($.argumen)) return { teks: $.TEKS('command/jooxdl') };
+            if (!$.argumen) return { teks: $.TEKS('command/jooxdl'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.)?joox\.com\//.test($.argumen)) return { teks: $.TEKS('command/jooxdl'), saran: ['/menu downloader', '/help'] };
             const id = new URL(($.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen)).pathname.split('/').reverse()[0];
             const res = await (await lolHumanAPI('joox/' + id)).json();
             if (res.status != 200) throw res.message;
@@ -2098,7 +2209,7 @@ const Perintah = {
         stx: '/spotify [q]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/spotify') };
+            if (!$.argumen) return { teks: $.TEKS('command/spotify'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('spotifysearch', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             return {
@@ -2116,7 +2227,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/spotifydl') };
+            if (!$.argumen) return { teks: $.TEKS('command/spotifydl'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.|open\.)?spotify\.com\//.test($.argumen)) return { teks: $.TEKS('command/spotifydl') };
             const res = await (await lolHumanAPI('spotify', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
@@ -2143,8 +2254,8 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             const waiter = cekWaiter($);
             if (waiter.val) return waiter.tolak();
-            if (!$.argumen) return { teks: $.TEKS('command/twittervideo') };
-            if (!/^(https?:\/\/)?(www\.)?twitter\.com\//.test($.argumen)) return { teks: $.TEKS('command/twittervideo') };
+            if (!$.argumen) return { teks: $.TEKS('command/twittervideo'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.)?twitter\.com\//.test($.argumen)) return { teks: $.TEKS('command/twittervideo'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('twitter2', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const reso = Object.fromEntries(res.result.link.map((v) => [new URL(v.url).pathname.split('/')[5].split('x')[1] + 'p', v.url]));
@@ -2198,8 +2309,8 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             const waiter = cekWaiter($);
             if (waiter.val) return waiter.tolak();
-            if (!$.argumen) return { teks: $.TEKS('command/instagramdl') };
-            if (!/^(https?:\/\/)?(www\.)?instagram\.com\//.test($.argumen)) return { teks: $.TEKS('command/instagramdl') };
+            if (!$.argumen) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.)?instagram\.com\//.test($.argumen)) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('instagram', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             if (res.result.length === 1) {
@@ -2231,7 +2342,7 @@ const Perintah = {
                 waiter.tambahkan($.pengirim, ['instagramdl'], { medias: res.result });
                 return {
                     teks: $.TEKS('command/instagramdl/result').replace('%count', res.result.length),
-                    saran: ['/all', '/cancel'],
+                    saran: ['/1', '/all', '/cancel'],
                 };
             } else {
                 throw 'nolink';
@@ -2338,8 +2449,8 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/tiktokvideo') };
-            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokvideo') };
+            if (!$.argumen) return { teks: $.TEKS('command/tiktokvideo'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokvideo'), saran: ['/menu downloader', '/help'] };
             const f = await lolHumanAPI('tiktokwm', 'url=' + encodeURI($.argumen));
             if (f.status != 200) throw `${f.status} tiktokwm`;
             const { file } = await saveFetchByStream(f, 'mp4');
@@ -2356,8 +2467,9 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/tiktokvideonowm') };
-            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokvideonowm') };
+            if (!$.argumen) return { teks: $.TEKS('command/tiktokvideonowm'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen))
+                return { teks: $.TEKS('command/tiktokvideonowm'), saran: ['/menu downloader', '/help'] };
             let link, res, e;
             const endpoints = _.shuffle(['tiktok', 'tiktok2', 'tiktok3']);
             for (const endpoint of endpoints) {
@@ -2385,8 +2497,8 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!$.argumen) return { teks: $.TEKS('command/tiktokaudio') };
-            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokaudio') };
+            if (!$.argumen) return { teks: $.TEKS('command/tiktokaudio'), saran: ['/menu downloader', '/help'] };
+            if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokaudio'), saran: ['/menu downloader', '/help'] };
             const f = await lolHumanAPI('tiktokmusic', 'url=' + encodeURI($.argumen));
             if (f.status != 200) throw `${f.status} tiktokmusic`;
             const { file } = await saveFetchByStream(f, 'mp3');
@@ -2403,7 +2515,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.)?mediafire\.com\//.test($.argumen)) return { teks: $.TEKS('command/mediafiredl') };
+            if (!/^(https?:\/\/)?(www\.)?mediafire\.com\//.test($.argumen)) return { teks: $.TEKS('command/mediafiredl'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('mediafire', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.link;
@@ -2428,7 +2540,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\d+\.)?zippyshare\.com\//.test($.argumen)) return { teks: $.TEKS('command/zippysharedl') };
+            if (!/^(https?:\/\/)?(www\d+\.)?zippyshare\.com\//.test($.argumen)) return { teks: $.TEKS('command/zippysharedl'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('zippyshare', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.download_url;
@@ -2453,7 +2565,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestimage') };
+            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestimage'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('pinterestdl', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = Object.entries(res.result).sort((a, b) => b[0] - a[0])[0][1];
@@ -2473,7 +2585,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestvideo') };
+            if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestvideo'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('pinterestvideo', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = Object.entries(res.result).sort((a, b) => b[0] - a[0])[0][1];
@@ -2506,7 +2618,8 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.)?sharechat\.com\/video\//.test($.argumen)) return { teks: $.TEKS('command/sharechatvideo') };
+            if (!/^(https?:\/\/)?(www\.)?sharechat\.com\/video\//.test($.argumen))
+                return { teks: $.TEKS('command/sharechatvideo'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('sharechat', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.link_dl;
@@ -2518,6 +2631,20 @@ const Perintah = {
             };
         },
     },
+    report: {
+        stx: '/report [code]',
+        cat: 'bot',
+        fn: async ($) => {
+            if (!$.args[0]) return { teks: $.TEKS('command/report'), saran: ['/menu bot', '/help'] };
+            const error = cache.data.errors?.[$.args[0].toUpperCase()];
+            if (!error) return { teks: $.TEKS('command/report/notfound'), saran: ['/contacts admin'] };
+            const { _e } = await _kirimPesan(admin, {
+                teks: `${new Date(error.t).toLocaleString()}\n\n${error.e}\n\n${JSON.stringify(error.$, null, '    ')}`,
+            });
+            if (_e) throw _e;
+            return { teks: $.TEKS('command/report/done') };
+        },
+    },
     snackvideo: {
         stx: '/snackvideo [link]',
         cat: 'downloader',
@@ -2525,7 +2652,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.)?sck\.io\/p/.test($.argumen)) return { teks: $.TEKS('command/snackvideo') };
+            if (!/^(https?:\/\/)?(www\.)?sck\.io\/p/.test($.argumen)) return { teks: $.TEKS('command/snackvideo'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('snackvideo', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.link_dl;
@@ -2544,7 +2671,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smulevideo') };
+            if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smulevideo'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.video;
@@ -2563,7 +2690,7 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smuleaudio') };
+            if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smuleaudio'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.audio;
@@ -2582,29 +2709,11 @@ const Perintah = {
         fn: async ($, data) => {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.)?(icocofun\.com|i\.coco\.fun)\//.test($.argumen)) return { teks: $.TEKS('command/cocofun') };
-            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
-            if (res.status != 200) throw res.message;
-            const link = res.result.withwm;
-            const f = await fetch(link);
-            const { file } = await saveFetchByStream(f, 'mp4');
-            return {
-                video: { file: file },
-                _limit: limit,
-            };
-        },
-    },
-    cocofunnowm: {
-        stx: '/cocofunNoWM [link]',
-        cat: 'downloader',
-        lim: true,
-        fn: async ($, data) => {
-            const limit = cekLimit($, data);
-            if (limit.val === 0) return limit.habis;
-            if (!/^(https?:\/\/)?(www\.)?(icocofun\.com|i\.coco\.fun)\//.test($.argumen)) return { teks: $.TEKS('command/cocofunnowm') };
+            if (!/^(https?:\/\/)?(www\.)?(icocofun\.com|i\.coco\.fun)\//.test($.argumen))
+                return { teks: $.TEKS('command/cocofun'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('cocofun', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
-            const link = res.result.nowm;
+            const link = res.result.withwm;
             const f = await fetch(link);
             const { file } = await saveFetchByStream(f, 'mp4');
             return {
@@ -2682,7 +2791,7 @@ const Perintah = {
         cat: 'multiplatformtools',
         fn: async ($, data) => {
             if ($.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/privateonly') };
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
             if (!cekPremium($, data) && (await DB.cari({ bindto: $.id }, true)).hasil?.filter?.((v) => v._id !== $.uid)?.length > 3)
                 return { teks: $.TEKS('command/bind/limit') };
             let force = false;
@@ -2718,7 +2827,7 @@ const Perintah = {
         cat: 'multiplatformtools',
         fn: async ($, data) => {
             if ($.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/privateonly') };
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
             if (!$.argumen) {
                 return { teks: $.TEKS('command/unbind/notice') };
             } else {
@@ -2761,6 +2870,7 @@ const Perintah = {
                           )
                           .join('\n')
                     : $.TEKS('command/boundlist/notfound'),
+                saran: bound?.length ? ['/bind'] : undefined,
             };
         },
     },
@@ -2768,10 +2878,10 @@ const Perintah = {
         stx: '/forward [n/all]',
         cat: 'multiplatformtools',
         fn: async ($, data) => {
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
-            if (!$.q) return { teks: $.TEKS('command/forward') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
+            if (!$.q) return { teks: $.TEKS('command/forward'), saran: ['/boundlist', '/forward all', '/menu multiaccount', '/help'] };
             const bound = (await DB.cari({ bindto: $.id }, true)).hasil?.filter?.((v) => v._id !== $.uid);
-            if (!bound.length) return { teks: $.TEKS('command/forward/notbound') };
+            if (!bound.length) return { teks: $.TEKS('command/forward/notbound'), saran: ['/bind', '/menu multiaccount'] };
             let idx;
             if ($.args[0]?.toLowerCase?.() === 'all') {
                 const res = await Promise.allSettled(bound.map((v) => forward(v._id)));
@@ -2785,7 +2895,15 @@ const Perintah = {
                     cache.data.errors ||= {};
                     cache.data.errors[errId] = {
                         $: $,
-                        e: rejected.map((v) => v.reason?.stack ?? v.reason).join('\n=============\n'),
+                        e: rejected
+                            .map((v) => {
+                                let er = v.reason?.stack ?? v.reason;
+                                if (String(er) === '[object Object]') {
+                                    er = JSON.stringify(er);
+                                }
+                                return er;
+                            })
+                            .join('\n=============\n'),
                         t: Date.now(),
                     };
                 }
@@ -2795,6 +2913,7 @@ const Perintah = {
                         .replace('%s', fulfilled.length)
                         .replace('%f', errors.length ? `${errors.length} (${errId})` : '0')
                         .replace('%n', notsupported.length),
+                    saran: errId ? ['/report ' + errId] : undefined,
                 };
             } else if (!isNaN((idx = parseInt($.argumen))) && idx > 0 && idx <= bound.length) {
                 try {
@@ -2805,7 +2924,7 @@ const Perintah = {
                     throw e;
                 }
             } else {
-                return { teks: $.TEKS('command/forward') };
+                return { teks: $.TEKS('command/forward'), saran: ['/boundlist', '/forward all', '/menu multiaccount', '/help'] };
             }
 
             async function forward(tujuan) {
@@ -2910,7 +3029,7 @@ const Perintah = {
         cat: 'bot',
         fn: async ($, data) => {
             if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
-            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
             return {
                 teks: $.TEKS('command/groupstatus').replace('%join', new Date(data.c.join).toLocaleString()),
             };
@@ -2945,15 +3064,15 @@ const Perintah = {
         hd: async (waiter, $) => {
             if ($.teks) {
                 if ($.perintah === 'cancel') {
-                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban) });
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/cancelled').replace('%ans', waiter.val.jawaban), saran: ['/tebakgambar'] });
                 }
                 if (new RegExp(waiter.val.jawaban).test($.teks.trim().toLowerCase())) {
-                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban) });
+                    return waiter.selesai({ teks: $.TEKS('command/$gamequestion/correct').replace('%ans', waiter.val.jawaban), saran: ['/tebakgambar'] });
                 } else {
                     if (--waiter.val.retries > 0) {
-                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries) });
+                        return waiter.belum({ teks: $.TEKS('command/$gamequestion/tryagain').replace('%lives', waiter.val.retries), saran: ['/cancel'] });
                     } else {
-                        return waiter.selesai({ teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban) });
+                        return waiter.selesai({ teks: $.TEKS('command/$gamequestion/incorrect').replace('%ans', waiter.val.jawaban), saran: ['/tebakgambar'] });
                     }
                 }
             } else {
@@ -2991,7 +3110,7 @@ const Perintah = {
         cat: 'fun',
         lang: ['id'],
         fn: ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/apakah') };
+            if (!$.argumen) return { teks: $.TEKS('command/apakah'), saran: ['/menu fun', '/help'] };
             return { teks: _.sample($.TEKS('command/apakah/$answers').split('\n')) };
         },
     },
@@ -3000,7 +3119,7 @@ const Perintah = {
         cat: 'fun',
         lang: ['id'],
         fn: async ($, data, { endpoint, name } = {}) => {
-            if (!$.arg) return { teks: $.TEKS(name ? 'command/' + name : 'command/bahasapurba') };
+            if (!$.arg) return { teks: $.TEKS(name ? 'command/' + name : 'command/bahasapurba'), saran: ['/menu fun', '/help'] };
             const res = await (await lolHumanAPI(endpoint || 'bahasapurba', 'text=' + encodeURI($.arg))).json();
             if (res.status != 200) throw res.message;
             return {
@@ -3032,7 +3151,7 @@ const Perintah = {
         stx: '/osu [username]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/osu') };
+            if (!$.argumen) return { teks: $.TEKS('command/osu'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('osuname/' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             return {
@@ -3046,7 +3165,7 @@ const Perintah = {
         stx: '/heroml [hero]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.argumen) return { teks: $.TEKS('command/heroml') };
+            if (!$.argumen) return { teks: $.TEKS('command/heroml'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('heroml/' + encodeURI($.argumen))).json();
             if (res.status == 404) return { teks: $.TEKS('command/heroml/notfound') };
             if (res.status != 200) throw res.message;
@@ -3064,7 +3183,7 @@ const Perintah = {
         stx: '/mlusername [id] [serverid]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!($.args[0] && $.args[1])) return { teks: $.TEKS('command/mlusername') };
+            if (!($.args[0] && $.args[1])) return { teks: $.TEKS('command/mlusername'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI(`mobilelegend/${encodeURI($.args[0])}/${encodeURI($.args[1])}`)).json();
             if (res.status != 200) throw res.message;
             return {
@@ -3076,7 +3195,7 @@ const Perintah = {
         stx: '/ffusername [id]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!$.args[0]) return { teks: $.TEKS('command/ffusername') };
+            if (!$.args[0]) return { teks: $.TEKS('command/ffusername'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI(`freefire/${encodeURI($.args[0])}`)).json();
             if (res.status != 200) throw res.message;
             return {
@@ -3088,7 +3207,7 @@ const Perintah = {
         stx: '/pubgusername [id]',
         cat: 'searchengine',
         fn: async ($) => {
-            if (!($.args[0] && $.args[1])) return { teks: $.TEKS('command/pubgusername') };
+            if (!($.args[0] && $.args[1])) return { teks: $.TEKS('command/pubgusername'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI(`pubg/${encodeURI($.args[0])}/${encodeURI($.args[1])}`)).json();
             if (res.status != 200) throw res.message;
             return {
@@ -3101,37 +3220,37 @@ const Perintah = {
         cat: 'rss',
         lim: true,
         fn: async ($, data) => {
-            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
-            if ($.pengirim.endsWith('#C') && !data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
-            if (!$.pengirim.endsWith('#C') && !$.id) return { teks: $.TEKS('permission/registeredonly') };
-            if (!$.args[0]) return { teks: $.TEKS('command/addrss') };
+            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly'), saran: ['/pricing'] };
+            if ($.pengirim.endsWith('#C') && !data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+            if (!$.pengirim.endsWith('#C') && !$.id)
+                return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
+            if (!$.args[0]) return { teks: $.TEKS('command/addrss'), saran: ['/menu rss', '/help'] };
             const url = $.args[0].startsWith('http') ? $.args[0] : 'https://' + $.args[0];
+            if (data.c?.rss?.includes?.(url)) return { teks: $.TEKS('command/rss/duplicate'), saran: ['/rsslist'] };
             try {
                 new URL(url);
             } catch {
-                return { teks: $.TEKS('command/addrss') };
+                return { teks: $.TEKS('command/addrss'), saran: ['/menu rss', '/help'] };
             }
             const { h, _e } = IPC.kirimKueri('RS', {
                 add: [url, $.pengirim],
             });
             if (_e) {
-                if (_e === 'notfeed') return { teks: $.TEKS('command/addrss/notfeed') };
+                if (_e === 'notfeed') return { teks: $.TEKS('command/addrss/notfeed'), saran: ['/menu rss', '/help'] };
                 else throw _e;
             }
-            return { teks: $.TEKS('command/addrss/done') };
+            return { teks: $.TEKS('command/addrss/done'), saran: ['/rsslist'] };
         },
     },
     rsslist: {
         stx: '/RSSlist',
         cat: 'rss',
         lim: true,
-        fn: async ($) => {
-            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
-            const { _e, hasil } = await DB.cari({ _id: $.pengirim });
-            if (_e) throw _e;
-            if (!hasil.rss) return { teks: $.TEKS('command/rsslist/notfound') };
+        fn: async ($, data) => {
+            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly'), saran: ['/pricing'] };
+            if (!data.c?.rss) return { teks: $.TEKS('command/rsslist/notfound'), saran: ['/addrss', '/menu rss'] };
             return {
-                teks: hasil.rss.map((v, i) => `${i + 1}. ${v}`).join('\n'),
+                teks: data.c.rss.map((v, i) => `${i + 1}. ${v}`).join('\n'),
             };
         },
     },
@@ -3140,14 +3259,14 @@ const Perintah = {
         cat: 'rss',
         lim: true,
         fn: async ($) => {
-            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly') };
-            if (!$.args[0] || isNaN(parseInt($.args[0]))) return { teks: $.TEKS('command/deleterss') };
+            if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly'), saran: ['/pricing'] };
+            if (!$.args[0] || isNaN(parseInt($.args[0]))) return { teks: $.TEKS('command/deleterss'), saran: ['/menu rss', '/help', '/rsslist'] };
             const idx = parseInt($.args[0]) - 1;
             const { h, l, _e } = await IPC.kirimKueri('RS', {
                 del: [idx, $.pengirim],
             });
             if (_e) {
-                if (_e === 'outofindex') return { teks: $.TEKS('command/deleterss') };
+                if (_e === 'outofindex') return { teks: $.TEKS('command/deleterss'), saran: ['/menu rss', '/help', '/rsslist'] };
                 else throw _e;
             }
             return { teks: $.TEKS('command/deleterss/done').replace('%link', l) };
@@ -3158,8 +3277,8 @@ const Perintah = {
         cat: 'multiplatformtools',
         fn: async ($, data) => {
             if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
-            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
             if (!(await isOwner($))) return { teks: $.TEKS('permission/owneronly') };
             if (!cekPremium($, data) && data.i.groups?.length > 3) return { teks: $.TEKS('command/addgroup/limit') };
             const { _e } = await DB.perbarui({ _id: $.id }, { $push: { groups: data.c.id } });
@@ -3171,8 +3290,8 @@ const Perintah = {
         stx: '/grouplist',
         cat: 'multiplatformtools',
         fn: async ($, data) => {
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
-            if (!data.i.groups?.length) return { teks: $.TEKS('command/grouplist/notfound') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
+            if (!data.i.groups?.length) return { teks: $.TEKS('command/grouplist/notfound'), saran: ['/addgroup', '/menu multiaccount'] };
             const groups = [];
             for (const [idx, gid] of Object.entries(data.i.groups)) {
                 groups.push(`${+idx + 1}. ${(await DB.cari({ id: gid }))?.hasil?.gname || v}`);
@@ -3184,9 +3303,9 @@ const Perintah = {
         stx: '/deletegroup [n]',
         cat: 'multiplatformtools',
         fn: async ($, data) => {
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
             if (!$.args[0] || isNaN(parseInt($.args[0])) || parseInt($.args[0]) < 1 || parseInt($.args[0]) > data.i.groups?.length)
-                return { teks: $.TEKS('command/deletegroup') };
+                return { teks: $.TEKS('command/deletegroup'), saran: ['/menu multiaccount', '/help', '/grouplist'] };
             const idx = parseInt($.args[0]);
             const { _e } = await DB.perbarui({ _id: $.id }, { $pull: { groups: data.i.groups[idx - 1] } });
             if (_e) throw _e;
@@ -3197,9 +3316,9 @@ const Perintah = {
         stx: '/forwardgroup [n/all]',
         cat: 'multiplatformtools',
         fn: async ($, data) => {
-            if (!$.id) return { teks: $.TEKS('permission/registeredonly') };
-            if (!$.q) return { teks: $.TEKS('command/forwardgroup') };
-            if (!data.i.groups?.length) return { teks: $.TEKS('command/forwardgroup/notfound') };
+            if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot', '/menu multiaccount'] };
+            if (!$.q) return { teks: $.TEKS('command/forwardgroup'), saran: ['/grouplist', '/forwardgroup all', '/menu multiaccount', '/help'] };
+            if (!data.i.groups?.length) return { teks: $.TEKS('command/forwardgroup/notfound'), saran: ['/addgroup', '/menu multiaccount'] };
             const tujuan = [];
             for (const gid of data.i.groups) {
                 tujuan.push((await DB.cari({ id: gid }))?.hasil?._id);
@@ -3227,6 +3346,7 @@ const Perintah = {
                         .replace('%s', fulfilled.length)
                         .replace('%f', errors.length ? `${errors.length} (${errId})` : '0')
                         .replace('%n', notsupported.length),
+                    saran: errId ? ['/report ' + errId] : undefined,
                 };
             } else if (!isNaN((idx = parseInt($.argumen))) && idx > 0 && idx <= tujuan.length) {
                 try {
@@ -3238,7 +3358,7 @@ const Perintah = {
                     throw e;
                 }
             } else {
-                return { teks: $.TEKS('command/forwardgroup') };
+                return { teks: $.TEKS('command/forwardgroup'), saran: ['/grouplist', '/forwardgroup all', '/menu multiaccount', '/help'] };
             }
 
             async function forward(tujuan) {
@@ -3338,7 +3458,79 @@ const Perintah = {
             }
         },
     },
+    broadcast: {
+        stx: '/broadcast [text]',
+        cat: 'dev',
+        fn: async ($) => {
+            if (!cekDev($.uid)) return;
+            let gambar;
+            if ($.gambar || $.q?.gambar) {
+                const { file, _e } = await unduh($.pengirim, $.gambar || $.q?.gambar);
+                if (_e) throw _e;
+                gambar = await uploadGambar(file);
+            } else {
+                if (!$.arg) return { teks: 'err: text' };
+            }
+            cache.data.broadcast ||= [];
+            const id = cache.data.broadcast.push({
+                teks: $.arg,
+                gambar: gambar,
+                terjangkau: [],
+            });
+            return {
+                teks: $.TEKS('command/broadcast/done')
+                    .replace('%id', id)
+                    .replace('%img', gambar || '-')
+                    .replace('%txt', $.arg || '-'),
+                saran: ['/broadcastlist'],
+            };
+        },
+    },
+    broadcastlist: {
+        stx: '/broadcastlist',
+        cat: 'dev',
+        fn: ($) => {
+            if (!cekDev($.uid)) return;
+            return {
+                teks: cache.data.broadcast
+                    ?.map?.((v, i) => `${i + 1}. Broadcast${i + 1}\n${v.terjangkau.length} ${$.TEKS('command/broadcastlist/peoplereached')}`)
+                    ?.join?.('\n\n'),
+            };
+        },
+    },
+    deletebroadcast: {
+        stx: '/deletebroadcast [n]',
+        cat: 'dev',
+        fn: ($) => {
+            if (!cekDev($.uid)) return;
+            const n = parseInt($.args[0]);
+            if (isNaN(n) || n <= 0 || n > cache.data.broadcast?.length || 0) return { teks: 'err: index' };
+            cache.data.broadcast.splice(n - 1, 1);
+            return { teks: $.TEKS('command/deletebroadcast/done').replace('%id', n) };
+        },
+    },
 };
+
+const stats = {
+    cmds: (cmd) => {
+        return IPC.kirimSinyal('ST', {
+            c: [Date.now(), cmd],
+        });
+    },
+};
+
+async function uploadGambar(file) {
+    let form = new FormData();
+    form.append('file', fs.createReadStream(file));
+    let res = await fetch('https://telegra.ph/upload', {
+        method: 'POST',
+        body: form,
+    });
+    if (res.status != 200) throw res.status;
+    let img = await res.json();
+    if (img.error) throw img.error;
+    return 'https://telegra.ph' + img[0].src;
+}
 
 async function isAdmin($) {
     return (await IPC.kirimKueri($.platform, { isAdmin: { c: $.pengirim, u: $.uid } })).admin;
@@ -3350,6 +3542,14 @@ async function isOwner($) {
 
 function saveFetchByStream(res, ext, maxSize) {
     return new Promise((resolve, reject) => {
+        if (ext === 'mp4' && res.headers.get('content-type') !== 'video/mp4') {
+            res.body.close();
+            return reject('not a video');
+        }
+        if (ext === 'mp3' && res.headers.get('content-type') !== 'audio/mp3') {
+            res.body.close();
+            return reject('not an audio');
+        }
         if (maxSize && +res.headers.get('content-length') > maxSize) {
             res.body.close();
             reject('toobig');
@@ -3374,23 +3574,6 @@ function saveFetchByStream(res, ext, maxSize) {
         res.body.on('error', reject);
         stream.on('error', reject);
     });
-}
-
-function listPerintah(listKategori, perintahObj, lang) {
-    const map = {};
-    const cats = Object.fromEntries(listKategori.split('\n').map((v) => v.split('=')));
-    for (const cmd in perintahObj) {
-        if (perintahObj[cmd].lang && !perintahObj[cmd].lang.includes(lang)) continue;
-        const cat = cats[perintahObj[cmd].cat];
-        if (!map[cat]) map[cat] = [];
-        map[cat].push((perintahObj[cmd].lim ? '$ ' : '') + perintahObj[cmd].stx);
-    }
-    return {
-        teks: Object.entries(map)
-            .sort(() => _.random(-2, 2))
-            .map((v) => '• ' + v[0] + '\n\n' + _.sortBy(v[1]).join('\n'))
-            .join('\n\n'),
-    };
 }
 
 const ukuranMaksimal = {

@@ -56,14 +56,14 @@ bot.on(['message', 'channel_post'], async (konteks) => {
     }
     if (cache.cekizin[cid].p === 'n') return;
     const isChannel = konteks.message.chat.type === 'channel';
+    const name = [konteks.message.from.first_name, konteks.message.from.last_name].filter(Boolean).join(' ');
     let pesan = {
         pengirim: isChannel ? IDChannel(cid) : uid == cid ? IDPengguna(uid) : IDChat(cid),
         uid: isChannel ? IDChannel(cid) : IDPengguna(uid),
         mid: konteks.message.message_id,
-        tg_name: konteks.message.from.username
-            ? '@' + konteks.message.from.username
-            : konteks.message.sender_chat?.title || [konteks.message.from.first_name, konteks.message.from.last_name].filter(Boolean).join(' '),
+        tg_name: konteks.message.from.username ? '@' + konteks.message.from.username : konteks.message.sender_chat?.title || name,
         gname: uid != cid || isChannel ? konteks.message.chat.title : undefined,
+        name: name,
     };
 
     function muatPesan(message) {
@@ -84,13 +84,15 @@ bot.on(['message', 'channel_post'], async (konteks) => {
                 id: message.sticker.is_animated ? message.sticker.thumb.file_id : message.sticker.file_id,
                 eks: 'webp',
                 ukuran: message.sticker.file_size,
-                animasi: message.sticker.is_animated,
+                animasi: message.sticker.is_video,
+                tg_animated_sticker: message.sticker.is_animated,
             };
         } else if (message?.video) {
             _.video = {
                 id: message.video.file_id,
                 eks: 'mp4',
                 ukuran: message.video.file_size,
+                durasi: message.video.duration * 1000,
             };
         } else if (message?.video_note) {
             _.video = {
@@ -98,6 +100,7 @@ bot.on(['message', 'channel_post'], async (konteks) => {
                 eks: 'mp4',
                 ukuran: message.video_note.file_size,
                 tg_video_note: true,
+                durasi: message.video_note.duration * 1000,
             };
         } else if (message?.location) {
             _.lokasi = {
@@ -109,6 +112,7 @@ bot.on(['message', 'channel_post'], async (konteks) => {
                 id: message.audio.file_id,
                 eks: 'mp3',
                 ukuran: message.audio.file_size,
+                durasi: message.audio.duration * 1000,
             };
         } else if (message?.document && !message?.animation) {
             const eks = message.document.file_name.split('.').reverse()[0] || '';
@@ -132,6 +136,7 @@ bot.on(['message', 'channel_post'], async (konteks) => {
                 eks: 'mp4',
                 ukuran: message.animation.file_size,
                 gif: true,
+                durasi: message.animation.duration * 1000,
             };
         }
 
@@ -230,8 +235,7 @@ async function kirimPesan(pesan) {
         const $ = pesan._;
         let m, ids;
         //////////////////////////////// GAMBAR
-        if ($.gambar) {
-            await bot.telegram.sendChatAction(penerima, 'upload_photo');
+        if ($.gambar && !Array.isArray($.gambar)) {
             if ($.teks) {
                 const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
                     teksSisa = $.teks.length > 1024 ? $.teks.slice(1024) : '';
@@ -244,11 +248,33 @@ async function kirimPesan(pesan) {
                 else if ($.gambar.file) m = await bot.telegram.sendPhoto(penerima, { source: $.gambar.file }, opsi);
                 else if ($.gambar.url) m = await bot.telegram.sendPhoto(penerima, { url: $.gambar.url }, opsi);
             }
+        } else if (Array.isArray($.gambar)) {
+            const media = [];
+            const _m = {
+                type: 'photo',
+            };
+            for (const gambar of $.gambar) {
+                if (gambar.id)
+                    media.push({
+                        ..._m,
+                        media: gambar.id,
+                    });
+                else if (gambar.file)
+                    media.push({
+                        ..._m,
+                        media: { source: gambar.file },
+                    });
+                else if (gambar.url)
+                    media.push({
+                        ..._m,
+                        media: { url: gambar.url },
+                    });
+            }
+            m = await bot.telegram.sendMediaGroup(penerima, media);
         }
 
         //////////////////////////////// VIDEO
         else if ($.video) {
-            await bot.telegram.sendChatAction(penerima, 'upload_video');
             if ($.video.gif) {
                 if ($.teks) {
                     const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
@@ -293,7 +319,6 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// STIKER
         else if ($.stiker) {
-            await bot.telegram.sendChatAction(penerima, 'choose_sticker');
             if ($.stiker.id) m = await bot.telegram.sendSticker(penerima, $.stiker.id, { ...opsi });
             else if ($.stiker.file) m = await bot.telegram.sendSticker(penerima, { source: $.stiker.file }, { ...opsi });
             else if ($.stiker.url) m = await bot.telegram.sendSticker(penerima, { url: $.stiker.url }, { ...opsi });
@@ -301,13 +326,11 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// LOKASI
         else if ($.lokasi) {
-            await bot.telegram.sendChatAction(penerima, 'find_location');
             m = await bot.telegram.sendLocation(penerima, $.lokasi.lat, $.lokasi.lon, opsi);
         }
 
         //////////////////////////////// AUDIO
         else if ($.audio) {
-            await bot.telegram.sendChatAction(penerima, 'upload_voice');
             if ($.teks) {
                 const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
                     teksSisa = $.teks.length > 1024 ? $.teks.slice(1024) : '';
@@ -324,7 +347,6 @@ async function kirimPesan(pesan) {
 
         //////////////////////////////// DOKUMEN
         else if ($.dokumen) {
-            await bot.telegram.sendChatAction(penerima, 'upload_document');
             opsi.file_name = $.namaFile || undefined;
             if ($.teks) {
                 const teksAwal = $.teks.length > 1024 ? $.teks.slice(0, 1024) : $.teks,
