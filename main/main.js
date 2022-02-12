@@ -4,6 +4,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 
 if (!fs.existsSync('./tmp/')) fs.mkdirSync('./tmp/');
+if (!fs.existsSync('./data/')) fs.mkdirSync('./data/');
 
 const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
