@@ -3707,7 +3707,7 @@ function logPesan(d, pesan, bot) {
                     : ''
             }]`
         ),
-        pesan.teks || ''
+        pesan.teks?.slice?.(0, 150) || ''
     );
 }
 
