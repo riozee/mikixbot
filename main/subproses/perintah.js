@@ -3543,15 +3543,15 @@ async function isOwner($) {
 function saveFetchByStream(res, ext, maxSize) {
     return new Promise((resolve, reject) => {
         if (ext === 'mp4' && res.headers.get('content-type') !== 'video/mp4') {
-            res.body.close();
+            res.body?.close?.();
             return reject('not a video');
         }
         if (ext === 'mp3' && res.headers.get('content-type') !== 'audio/mp3') {
-            res.body.close();
+            res.body?.close?.();
             return reject('not an audio');
         }
         if (maxSize && +res.headers.get('content-length') > maxSize) {
-            res.body.close();
+            res.body?.close?.();
             reject('toobig');
         }
         const filename = `./tmp/${utils.namaFileAcak()}.${ext}`;
@@ -3561,7 +3561,7 @@ function saveFetchByStream(res, ext, maxSize) {
         res.body.on('data', (chunk) => {
             size += chunk.length;
             if (maxSize && size > maxSize) {
-                res.body.close();
+                res.body?.close?.();
                 reject('toobig');
             }
         });
