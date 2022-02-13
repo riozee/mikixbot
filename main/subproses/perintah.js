@@ -99,7 +99,7 @@ async function proses(pesan) {
     if ((data.c || data.i)?.ares) {
         for (const { t, r } of (data.c || data.i)?.ares) {
             if (new RegExp(`(\\s|^)${_.escapeRegExp(t)}(\\s|$)`, 'i')) {
-                kirimPesan($.pengirim, { teks: r });
+                kirimPesan($.pengirim, { teks: r, re: true, mid: $.mid });
             }
         }
     }
@@ -345,14 +345,20 @@ async function anch(pesan, data) {
                             },
                         });
                     }
-                    const newRoomID = Math.random().toString(36).slice(2);
+                    const d = new Date();
+                    const newRoomID =
+                        (+`${d.getUTCFullYear()}${d.getUTCMonth()}${d.getUTCDate()}${d.getUTCHours()}${d.getUTCMinutes()}${d.getUTCSeconds()}`).toString(36) +
+                        `-${Math.random().toString(36).slice(2, 3)}`;
                     cache.data.anch.room[newRoomID] = {
                         [$.uid]: partnerID,
                         [partnerID]: $.uid,
                     };
                     cache.data.anch.active.push($.uid, partnerID);
-                    kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] });
-                    kirimPesan($.uid, { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] });
+                    kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound').replace('%p', $.platform).replace('%i', newRoomID), saran: ['/anext', '/astop'] });
+                    kirimPesan($.uid, {
+                        teks: $.TEKS('anonymouschat/partnerfound').replace('%p', partnerID.split('#')[0]).replace('%i', newRoomID),
+                        saran: ['/anext', '/astop'],
+                    });
                 } else {
                     if (!cache.data.anch.ready) cache.data.anch.ready = [];
                     cache.data.anch.ready.push($.uid);
@@ -672,7 +678,10 @@ const Perintah = {
             if (cache.data.anch?.ready?.length) {
                 const partnerID = _.sample(cache.data.anch.ready);
                 _.pull(cache.data.anch.ready, partnerID);
-                const roomID = Math.random().toString(36).slice(2);
+                const d = new Date();
+                const roomID =
+                    (+`${d.getUTCFullYear()}${d.getUTCMonth()}${d.getUTCDate()}${d.getUTCHours()}${d.getUTCMinutes()}${d.getUTCSeconds()}`).toString(36) +
+                    `-${Math.random().toString(36).slice(2, 3)}`;
                 if (!cache.data.anch.room) cache.data.anch.room = {};
                 cache.data.anch.room[roomID] = {
                     [$.uid]: partnerID,
@@ -680,8 +689,8 @@ const Perintah = {
                 };
                 if (!cache.data.anch.active) cache.data.anch.active = [];
                 cache.data.anch.active.push($.uid, partnerID);
-                kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] });
-                return { teks: $.TEKS('anonymouschat/partnerfound'), saran: ['/anext', '/astop'] };
+                kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound').replace('%p', $.platform).replace('%i', roomID), saran: ['/anext', '/astop'] });
+                return { teks: $.TEKS('anonymouschat/partnerfound').replace('%p', partnerID.split('#')[0]).replace('%i', roomID), saran: ['/anext', '/astop'] };
             } else {
                 if (!cache.data.anch) cache.data.anch = {};
                 if (!cache.data.anch.ready) cache.data.anch.ready = [];
@@ -927,12 +936,12 @@ const Perintah = {
         cat: 'searchengine',
         lang: ['id'],
         fn: async ($) => {
-            if (!$.arg) return { teks: $.TEKS('command/kbbi'), saran: ['/menu searching', '/help'] };
+            if (!$.argumen) return { teks: $.TEKS('command/kbbi'), saran: ['/menu searching', '/help'] };
+            const [ANTONIM, GABUNGANKATA, KATATURUNAN, ARTI, PERIBAHASA, TERKAIT, LIHATJUGA, SINONIM, TRANSLASI] = $.TEKS('command/kbbi/$words')
+                .split('|')
+                .map((v) => v.trim());
             try {
-                const [ANTONIM, GABUNGANKATA, KATATURUNAN, ARTI, PERIBAHASA, TERKAIT, LIHATJUGA, SINONIM, TRANSLASI] = $.TEKS('command/kbbi/$words')
-                    .split('|')
-                    .map((v) => v.trim());
-                const f = await fetch('https://kateglo.com/api.php?format=json&phrase=' + encodeURIComponent($.arg.trim()));
+                const f = await fetch('https://kateglo.com/api.php?format=json&phrase=' + encodeURI($.argumen.trim()));
                 const res = (await f.json()).kateglo;
                 const kata = res.phrase ? res.phrase.toUpperCase() : res.phrase;
                 const akar = res.root[0] ? res.root.map((v) => v.root_phrase).join(' -> ') : '';
@@ -985,8 +994,20 @@ const Perintah = {
                     teks: `${akar ? `${akar} -> ` : ''}${kata} [${kelasLeksikal}]\n\n\n${definisi.trim()}\n\n${others}`,
                 };
             } catch (eror) {
+                const res = await (await lolHumanAPI('kbbi', 'query=' + encodeURI($.argumen.trim()))).json();
+                if (res.status != 200) throw res.message;
+                if (!res.result?.length) return { teks: $.TEKS('command/kbbi/notfound') };
                 return {
-                    teks: $.TEKS('command/kbbi/error') + '\n\n' + String(eror),
+                    teks: `${res.result[0].nama?.toUpperCase?.() || $.argumen}\n\n${
+                        res.result[0].makna
+                            ?.map?.(
+                                (v, i) =>
+                                    `(${i + 1}) [${v.kelas?.[0]?.kode || '-'}] ${v.submakna?.join?.('\n') || '-'}\n${
+                                        v.contoh?.map?.((v) => `» ${v}`)?.join?.('\n') || '-'
+                                    }`
+                            )
+                            .join('\n\n') || '-'
+                    }`,
                 };
             }
         },
@@ -3775,14 +3796,14 @@ const Perintah = {
                 id = { _id: $.id };
             }
             if (!$.argumen || isNaN(parseInt($.argumen))) return { teks: $.TEKS('command/deleteautoresponse'), saran: ['/autoresponselist', '/menu bot', '/help'] };
-            const data = $.pengirim.endsWith('#C') ? data.c : data.i,
+            const _data = $.pengirim.endsWith('#C') ? data.c : data.i,
                 idx = parseInt($.argumen);
-            if (!data?.ares?.length) return { teks: $.TEKS('command/deleteautoresponse/notfound'), saran: ['/addautoresponse'] };
-            if (idx <= 0 || idx > data.ares.length) return { teks: $.TEKS('command/deleteautoresponse'), saran: ['/autoresponselist', '/menu bot', '/help'] };
-            const q = data.ares.length === 1 ? { $unset: { ares: 1 } } : { $pull: { ares: { t: data.ares[idx - 1].t } } };
+            if (!_data?.ares?.length) return { teks: $.TEKS('command/deleteautoresponse/notfound'), saran: ['/addautoresponse'] };
+            if (idx <= 0 || idx > _data.ares.length) return { teks: $.TEKS('command/deleteautoresponse'), saran: ['/autoresponselist', '/menu bot', '/help'] };
+            const q = _data.ares.length === 1 ? { $unset: { ares: 1 } } : { $pull: { ares: { t: _data.ares[idx - 1].t } } };
             const { _e } = await DB.perbarui(id, q);
             if (_e) throw _e;
-            return { teks: $.TEKS('command/deleteautoresponse/done').replace('%f', data.ares[idx - 1].t), saran: ['/autoresponselist'] };
+            return { teks: $.TEKS('command/deleteautoresponse/done').replace('%f', _data.ares[idx - 1].t), saran: ['/autoresponselist'] };
         },
     },
 };
