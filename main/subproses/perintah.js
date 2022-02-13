@@ -12,6 +12,8 @@ const FormData = require('form-data');
 const mimetypes = require('mime-types');
 const gif = require('../alat/gif_konversi');
 const webp = require('../alat/webp_konversi');
+const xFar = require('xfarr-api');
+const cheerio = require('cheerio');
 
 //////////////////// VARS
 
@@ -1322,10 +1324,8 @@ const Perintah = {
             const res = await (await lolHumanAPI('ytaudio', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             try {
-                const ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
-                    ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
-                const { file, size } = await saveFetchByStream(await fetch(res.result.link.link), 'mp3', ukuranDokumenMaksimal);
-                if (size < ukuranAudioMaksimal)
+                const { file, size } = await saveFetchByStream(await fetch(res.result.link.link), 'mp3', ukuranMaksimal.dokumen[$.platform]);
+                if (size < ukuranMaksimal.audio[$.platform])
                     return {
                         audio: { file: file },
                         teks: res.result.title,
@@ -1344,6 +1344,77 @@ const Perintah = {
                             .replace('%ares', res.result.link.bitrate + 'kb/s'),
                     };
                 throw e;
+            }
+        },
+    },
+    ytaudio2: {
+        stx: '/ytaudio2 [link]',
+        cat: 'downloader',
+        fn: async ($, data, o = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            const CMD = o.command || 'ytaudio2',
+                REGLINK = o.regexlink || /^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/,
+                EXT = o.extension || 'mp3';
+            if (!$.argumen) return { teks: $.TEKS('command/' + CMD), saran: ['/menu downloader', '/help'] };
+            if (!REGLINK.test($.argumen)) return { teks: $.TEKS('command/' + CMD), saran: ['/menu downloader', '/help'] };
+            $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
+            const { medias } = await aioVideoDl($.argumen);
+            const mp3s = medias.filter((v) => v.extension === EXT);
+            if (!mp3s.length) return { teks: $.TEKS('command/' + CMD + '/notfound') };
+            if (mp3s.length === 1) {
+                return await Perintah.ytaudio2.hd({ url: mp3s[0].url, size: mp3s[0].size }, $, data, o);
+            }
+            waiter.tambahkan($.pengirim, ['ytaudio2'], {
+                link: mp3s.map((v) => ({
+                    url: v.url,
+                    size: v.size,
+                    quality: v.quality,
+                })),
+            });
+            return {
+                teks: $.TEKS('command/' + CMD + '/result').replace('%r', mp3s.map((v) => `/${v.quality} => ${v.quality.toUpperCase()}`).join('\n')),
+                saran: ['/cancel', ...mp3s.map((v) => '/' + v.quality)],
+            };
+        },
+        hd: async (waiter, $, data, o = {}) => {
+            const MIME = o.mimetype || 'audio/mp3',
+                EXT = o.extension || 'mp3',
+                MEDIA = o.media || 'audio',
+                CMD = o.command || 'ytaudio2';
+            async function download(link, size) {
+                try {
+                    if (size > ukuranMaksimal.dokumen[$.platform]) throw 'toobig';
+                    const { file, size: _size } = await saveFetchByStream(await fetch(link), EXT, ukuranMaksimal.dokumen[$.platform]);
+                    if (size < ukuranMaksimal.audio[$.platform])
+                        return {
+                            [MEDIA]: { file: file },
+                            _limit: cekLimit($, data),
+                        };
+                    return {
+                        dokumen: { file: file, mimetype: MIME, namaFile: file },
+                        _limit: cekLimit($, data),
+                    };
+                } catch (e) {
+                    if (e === 'toobig')
+                        return {
+                            teks: $.TEKS('command/$filetoobig').replace('%l', await getShortLink(link)),
+                        };
+                    throw e;
+                }
+            }
+            if (waiter.url && waiter.size) {
+                return await download(waiter.url, waiter.size);
+            }
+            if ($.perintah && waiter.val.link.find((v) => v.quality === $.perintah)) {
+                const { url, size, quality } = waiter.val.link.find((v) => v.quality === $.perintah);
+                return waiter.selesai(await download(url, size));
+            } else if ($.perintah === 'cancel') {
+                return waiter.selesai({ teks: $.TEKS('user/dialogcancelled').replace('%d', CMD) });
+            } else {
+                return waiter.notice('/cancel', CMD);
             }
         },
     },
@@ -3511,6 +3582,34 @@ const Perintah = {
     },
 };
 
+// thanks to XFar
+async function aioVideoDl(link) {
+    const html = await (
+        await fetch('https://aiovideodl.ml/', {
+            headers: {
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                cookie: 'PHPSESSID=3893d5f173e91261118a1d8b2dc985c3; _ga=GA1.2.792478743.1635388171;',
+            },
+        })
+    ).text();
+    const token = cheerio.load(html)('#token').attr('value');
+    const form = new FormData();
+    form.append('url', link);
+    form.append('token', token);
+    const res = await (
+        await fetch('https://aiovideodl.ml/wp-json/aio-dl/video-data/', {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                cookie: 'PHPSESSID=3893d5f173e91261118a1d8b2dc985c3; _ga=GA1.2.792478743.1635388171;',
+            },
+            body: form,
+        })
+    ).json();
+    return res;
+}
+
 const stats = {
     cmds: (cmd) => {
         return IPC.kirimSinyal('ST', {
@@ -3579,7 +3678,7 @@ function saveFetchByStream(res, ext, maxSize) {
 const ukuranMaksimal = {
     dokumen: {
         WA: 100_000_000,
-        TG: 2_000_000_000,
+        TG: 50_000_000,
     },
     video: {
         WA: 100_000_000,
