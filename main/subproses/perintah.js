@@ -3775,9 +3775,9 @@ const Perintah = {
         stx: '/autoresponselist',
         cat: 'bot',
         fn: async ($, data) => {
-            const data = $.pengirim.endsWith('#C') ? data.c : data.i;
+            const _data = $.pengirim.endsWith('#C') ? data.c : data.i;
             return {
-                teks: data?.ares?.map?.((v, i) => `${i + 1}. ${v.t}`)?.join?.('\n'),
+                teks: _data?.ares?.map?.((v, i) => `${i + 1}. ${v.t}`)?.join?.('\n'),
                 saran: ['/addautoresponse', '/deleteautoresponse'],
             };
         },
