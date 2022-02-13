@@ -96,9 +96,9 @@ async function proses(pesan) {
         }
     }
 
-    if ((data.c || data.i)?.ares) {
+    if ($.teks && (data.c || data.i)?.ares) {
         for (const { t, r } of (data.c || data.i)?.ares) {
-            if (new RegExp(`(\\s|^)${_.escapeRegExp(t)}(\\s|$)`, 'i')) {
+            if (new RegExp(`(\\s|^)${_.escapeRegExp(t)}(\\s|$)`, 'i').test($.teks)) {
                 kirimPesan($.pengirim, { teks: r, re: true, mid: $.mid });
             }
         }
