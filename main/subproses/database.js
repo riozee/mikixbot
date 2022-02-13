@@ -83,6 +83,7 @@ async function proses(pesan) {
             }
             _.remove(cache, pesan._.d);
         }
+        if (hasil?.acknowledged === false) throw hasil;
     } catch (e) {
         log(4);
         console.error(e);

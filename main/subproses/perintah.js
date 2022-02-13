@@ -84,13 +84,22 @@ async function proses(pesan) {
     if ($.platform === 'TG' && $.id && data.u.tg_name !== $.tg_name) {
         DB.perbarui({ _id: $.uid }, { $set: { tg_name: $.tg_name } });
     }
+
     if ($.pengirim.endsWith('#C')) {
         if (data.c) {
-            if (data.c?.adminonly) {
+            if (data.c.ao) {
                 if (!(await isAdmin($))) return;
             }
             if (data.c.gname !== $.gname) {
                 DB.perbarui({ _id: $.pengirim }, { $set: { gname: $.gname } });
+            }
+        }
+    }
+
+    if ((data.c || data.i)?.ares) {
+        for (const { t, r } of (data.c || data.i)?.ares) {
+            if (new RegExp(`(\\s|^)${_.escapeRegExp(t)}(\\s|$)`, 'i')) {
+                kirimPesan($.pengirim, { teks: r });
             }
         }
     }
@@ -3705,15 +3714,75 @@ const Perintah = {
             if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
             if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
             if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
-            if (data.c.adminonly) {
-                const { _e } = await DB.perbarui({ _id: data.c.id }, { $unset: { adminonly: 1 } });
+            if (data.c.ao) {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $unset: { ao: 1 } });
                 if (_e) throw _e;
                 return { teks: $.TEKS('command/setadminonly/off'), saran: ['/setadminonly'] };
             } else {
-                const { _e } = await DB.perbarui({ _id: data.c.id }, { $set: { adminonly: 1 } });
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { ao: 1 } });
                 if (_e) throw _e;
                 return { teks: $.TEKS('command/setadminonly/on'), saran: ['/setadminonly'] };
             }
+        },
+    },
+    addautoresponse: {
+        stx: '/addautoresponse [trigger] | [response]',
+        cat: 'bot',
+        fn: async ($, data) => {
+            let id;
+            if ($.pengirim.endsWith('#C')) {
+                if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+                if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+                id = { id: data.c.id };
+            } else {
+                if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot'] };
+                id = { _id: $.id };
+            }
+            if (!$.argumen) return { teks: $.TEKS('command/addautoresponse'), saran: ['/menu bot', '/help'] };
+            let [trigger, ...response] = $.argumen.split('|');
+            trigger = trigger.trim();
+            response = response.join('|').trim();
+            if (!trigger || !response) return { teks: $.TEKS('command/addautoresponse'), saran: ['/menu bot', '/help'] };
+            if (($.pengirim.endsWith('#C') ? data.c : data.i)?.ares?.find?.((v) => v.t === trigger))
+                return { teks: $.TEKS('command/addautoresponse/duplicate'), saran: ['/autoresponselist'] };
+            const { _e } = await DB.perbarui(id, { $push: { ares: { t: trigger, r: response } } });
+            if (_e) throw _e;
+            return { teks: $.TEKS('command/addautoresponse/done').replace('%f', trigger).replace('%r', response), saran: ['/autoresponselist'] };
+        },
+    },
+    autoresponselist: {
+        stx: '/autoresponselist',
+        cat: 'bot',
+        fn: async ($, data) => {
+            const data = $.pengirim.endsWith('#C') ? data.c : data.i;
+            return {
+                teks: data?.ares?.map?.((v, i) => `${i + 1}. ${v.t}`)?.join?.('\n'),
+                saran: ['/addautoresponse', '/deleteautoresponse'],
+            };
+        },
+    },
+    deleteautoresponse: {
+        stx: '/deleteautoresponse',
+        cat: 'bot',
+        fn: async ($, data) => {
+            let id;
+            if ($.pengirim.endsWith('#C')) {
+                if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+                if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+                id = { id: data.c.id };
+            } else {
+                if (!$.id) return { teks: $.TEKS('permission/registeredonly'), saran: ['/register ' + $.name, '/menu bot'] };
+                id = { _id: $.id };
+            }
+            if (!$.argumen || isNaN(parseInt($.argumen))) return { teks: $.TEKS('command/deleteautoresponse'), saran: ['/autoresponselist', '/menu bot', '/help'] };
+            const data = $.pengirim.endsWith('#C') ? data.c : data.i,
+                idx = parseInt($.argumen);
+            if (!data?.ares?.length) return { teks: $.TEKS('command/deleteautoresponse/notfound'), saran: ['/addautoresponse'] };
+            if (idx <= 0 || idx > data.ares.length) return { teks: $.TEKS('command/deleteautoresponse'), saran: ['/autoresponselist', '/menu bot', '/help'] };
+            const q = data.ares.length === 1 ? { $unset: { ares: 1 } } : { $pull: { ares: { t: data.ares[idx - 1].t } } };
+            const { _e } = await DB.perbarui(id, q);
+            if (_e) throw _e;
+            return { teks: $.TEKS('command/deleteautoresponse/done').replace('%f', data.ares[idx - 1].t), saran: ['/autoresponselist'] };
         },
     },
 };
