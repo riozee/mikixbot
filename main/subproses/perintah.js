@@ -1455,6 +1455,18 @@ const Perintah = {
             }
         },
     },
+    ytvideo2: {
+        stx: '/ytvideo2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'ytvideo2',
+                extension: 'mp4',
+                mimetype: 'video/mp4',
+                media: 'video',
+            });
+        },
+    },
     jadwaltv: {
         stx: '/jadwaltv [channel]',
         cat: 'information',
