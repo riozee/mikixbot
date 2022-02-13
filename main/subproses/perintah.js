@@ -12,6 +12,7 @@ const FormData = require('form-data');
 const mimetypes = require('mime-types');
 const gif = require('../alat/gif_konversi');
 const webp = require('../alat/webp_konversi');
+const cheerio = require('cheerio');
 
 //////////////////// VARS
 
@@ -1322,10 +1323,8 @@ const Perintah = {
             const res = await (await lolHumanAPI('ytaudio', 'url=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
             try {
-                const ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
-                    ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
-                const { file, size } = await saveFetchByStream(await fetch(res.result.link.link), 'mp3', ukuranDokumenMaksimal);
-                if (size < ukuranAudioMaksimal)
+                const { file, size } = await saveFetchByStream(await fetch(res.result.link.link), 'mp3', ukuranMaksimal.dokumen[$.platform]);
+                if (size < ukuranMaksimal.audio[$.platform])
                     return {
                         audio: { file: file },
                         teks: res.result.title,
@@ -1344,6 +1343,80 @@ const Perintah = {
                             .replace('%ares', res.result.link.bitrate + 'kb/s'),
                     };
                 throw e;
+            }
+        },
+    },
+    ytaudio2: {
+        stx: '/ytaudio2 [link]',
+        cat: 'downloader',
+        fn: async ($, data, o = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            const CMD = o.command || 'ytaudio2',
+                REGLINK = o.regexlink || /^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/,
+                EXT = o.extension || 'mp3';
+            const FILTER = o.filter || ((v) => v.extension === EXT);
+            if (!$.argumen) return { teks: $.TEKS('command/' + CMD), saran: ['/menu downloader', '/help'] };
+            if (!REGLINK.test($.argumen)) return { teks: $.TEKS('command/' + CMD), saran: ['/menu downloader', '/help'] };
+            $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
+            const { medias } = await aioVideoDl($.argumen);
+            const mp3s = medias.filter(FILTER);
+            if (!mp3s.length) return { teks: $.TEKS('command/' + CMD + '/notfound') };
+            if (mp3s.length === 1) {
+                return await Perintah.ytaudio2.hd({ url: mp3s[0].url, size: mp3s[0].size }, $, data, o);
+            }
+            waiter.tambahkan($.pengirim, ['ytaudio2'], {
+                link: mp3s.map((v) => ({
+                    url: v.url,
+                    size: v.size,
+                    quality: v.quality,
+                })),
+                o: o,
+            });
+            return {
+                teks: $.TEKS('command/' + CMD + '/result').replace('%r', mp3s.map((v) => `/${v.quality} => ${v.quality.toUpperCase()}`).join('\n')),
+                saran: ['/cancel', ...mp3s.map((v) => '/' + v.quality)],
+            };
+        },
+        hd: async (waiter, $, data, o = {}) => {
+            if (!o.command) o = waiter.val.o;
+            const MIME = o.mimetype || 'audio/mp3',
+                EXT = o.extension || 'mp3',
+                MEDIA = o.media || 'audio',
+                CMD = o.command || 'ytaudio2';
+            async function download(link, size) {
+                try {
+                    if (size > ukuranMaksimal.dokumen[$.platform]) throw 'toobig';
+                    const { file, size: _size } = await saveFetchByStream(await fetch(link), EXT, ukuranMaksimal.dokumen[$.platform]);
+                    if (size < ukuranMaksimal[MEDIA][$.platform])
+                        return {
+                            [MEDIA]: { file: file },
+                            _limit: cekLimit($, data),
+                        };
+                    return {
+                        dokumen: { file: file, mimetype: MIME, namaFile: file },
+                        _limit: cekLimit($, data),
+                    };
+                } catch (e) {
+                    if (e === 'toobig')
+                        return {
+                            teks: $.TEKS('command/$filetoobig').replace('%l', await getShortLink(link)),
+                        };
+                    throw e;
+                }
+            }
+            if (waiter.url && waiter.size) {
+                return await download(waiter.url, waiter.size);
+            }
+            if ($.perintah && waiter.val.link.find((v) => v.quality === $.perintah)) {
+                const { url, size, quality } = waiter.val.link.find((v) => v.quality === $.perintah);
+                return waiter.selesai(await download(url, size));
+            } else if ($.perintah === 'cancel') {
+                return waiter.selesai({ teks: $.TEKS('user/dialogcancelled').replace('%d', CMD) });
+            } else {
+                return waiter.notice('cancel', CMD);
             }
         },
     },
@@ -1383,6 +1456,19 @@ const Perintah = {
                     };
                 throw e;
             }
+        },
+    },
+    ytvideo2: {
+        stx: '/ytvideo2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'ytvideo2',
+                extension: 'mp4',
+                mimetype: 'video/mp4',
+                media: 'video',
+                filter: (v) => v.extension === 'mp4' && v.audioAvailable === true,
+            });
         },
     },
     jadwaltv: {
@@ -2312,14 +2398,15 @@ const Perintah = {
             if (!$.argumen) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.)?instagram\.com\//.test($.argumen)) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('instagram', 'url=' + encodeURI($.argumen))).json();
-            if (res.status != 200) throw res.message;
+            if (res.status != 200) {
+                res.result = (await aioVideoDl($.argumen)).medias.map((v) => v.url);
+            }
             if (res.result.length === 1) {
                 const f = await fetch(res.result[0]);
                 if (f.headers.get('content-type') === 'video/mp4') {
                     const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
                         ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
                     const { file, size } = await saveFetchByStream(f, 'mp4', ukuranDokumenMaksimal);
-                    console.log(size);
                     if (size < ukuranVideoMaksimal)
                         return {
                             video: { file: file },
@@ -2460,6 +2547,20 @@ const Perintah = {
             };
         },
     },
+    tiktokvideo2: {
+        stx: '/tiktokvideo2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'tiktokvideo2',
+                extension: 'mp4',
+                mimetype: 'video/mp4',
+                media: 'video',
+                filter: (v) => v.extension === 'mp4' && v.quality === 'watermark',
+                regexlink: /^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//,
+            });
+        },
+    },
     tiktokvideonowm: {
         stx: '/tiktokvideoNoWM [link]',
         cat: 'downloader',
@@ -2490,6 +2591,20 @@ const Perintah = {
             };
         },
     },
+    tiktokvideonowm2: {
+        stx: '/tiktokvideonowm2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'tiktokvideonowm2',
+                extension: 'mp4',
+                mimetype: 'video/mp4',
+                media: 'video',
+                filter: (v) => v.extension === 'mp4' && v.quality === 'hd',
+                regexlink: /^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//,
+            });
+        },
+    },
     tiktokaudio: {
         stx: '/tiktokaudio [link]',
         cat: 'downloader',
@@ -2506,6 +2621,20 @@ const Perintah = {
                 audio: { file: file },
                 _limit: limit,
             };
+        },
+    },
+    tiktokaudio2: {
+        stx: '/tiktokaudio2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'tiktokaudio2',
+                extension: 'mp3',
+                mimetype: 'audio/mp3',
+                media: 'audio',
+                filter: (v) => v.extension === 'mp3',
+                regexlink: /^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//,
+            });
         },
     },
     mediafiredl: {
@@ -3511,6 +3640,30 @@ const Perintah = {
     },
 };
 
+// thanks to XFar
+async function aioVideoDl(link) {
+    const html = await (
+        await fetch('https://aiovideodl.ml/', {
+            headers: {
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                cookie: 'PHPSESSID=3893d5f173e91261118a1d8b2dc985c3; _ga=GA1.2.792478743.1635388171;',
+            },
+        })
+    ).text();
+    const token = cheerio.load(html)('#token').attr('value');
+    const res = await (
+        await fetch('https://aiovideodl.ml/wp-json/aio-dl/video-data/?url=' + encodeURIComponent(link.trim()) + '&token=' + token, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                cookie: 'PHPSESSID=3893d5f173e91261118a1d8b2dc985c3; _ga=GA1.2.792478743.1635388171;',
+            },
+        })
+    ).json();
+    return res;
+}
+
 const stats = {
     cmds: (cmd) => {
         return IPC.kirimSinyal('ST', {
@@ -3546,7 +3699,7 @@ function saveFetchByStream(res, ext, maxSize) {
             res.body?.close?.();
             return reject('not a video');
         }
-        if (ext === 'mp3' && res.headers.get('content-type') !== 'audio/mp3') {
+        if (ext === 'mp3' && !['audio/mp3', 'audio/mp4', 'audio/mpeg'].includes(res.headers.get('content-type'))) {
             res.body?.close?.();
             return reject('not an audio');
         }
@@ -3579,7 +3732,7 @@ function saveFetchByStream(res, ext, maxSize) {
 const ukuranMaksimal = {
     dokumen: {
         WA: 100_000_000,
-        TG: 2_000_000_000,
+        TG: 50_000_000,
     },
     video: {
         WA: 100_000_000,
