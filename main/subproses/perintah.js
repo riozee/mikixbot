@@ -1413,7 +1413,7 @@ const Perintah = {
             } else if ($.perintah === 'cancel') {
                 return waiter.selesai({ teks: $.TEKS('user/dialogcancelled').replace('%d', CMD) });
             } else {
-                return waiter.notice('/cancel', CMD);
+                return waiter.notice('cancel', CMD);
             }
         },
     },
@@ -3640,7 +3640,7 @@ function saveFetchByStream(res, ext, maxSize) {
             res.body?.close?.();
             return reject('not a video');
         }
-        if (ext === 'mp3' && res.headers.get('content-type') !== 'audio/mp3') {
+        if (ext === 'mp3' && !['audio/mp3', 'audio/mp4'].includes(res.headers.get('content-type'))) {
             res.body?.close?.();
             return reject('not an audio');
         }
