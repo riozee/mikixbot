@@ -3698,7 +3698,7 @@ function saveFetchByStream(res, ext, maxSize) {
             res.body?.close?.();
             return reject('not a video');
         }
-        if (ext === 'mp3' && !['audio/mp3', 'audio/mp4'].includes(res.headers.get('content-type'))) {
+        if (ext === 'mp3' && !['audio/mp3', 'audio/mp4', 'audio/mpeg'].includes(res.headers.get('content-type'))) {
             res.body?.close?.();
             return reject('not an audio');
         }
