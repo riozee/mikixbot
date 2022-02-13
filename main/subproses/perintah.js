@@ -2398,7 +2398,9 @@ const Perintah = {
             if (!$.argumen) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.)?instagram\.com\//.test($.argumen)) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
             const res = await (await lolHumanAPI('instagram', 'url=' + encodeURI($.argumen))).json();
-            if (res.status != 200) throw res.message;
+            if (res.status != 200) {
+                res.result = (await aioVideoDl($.argumen)).medias.map((v) => v.url);
+            }
             if (res.result.length === 1) {
                 const f = await fetch(res.result[0]);
                 if (f.headers.get('content-type') === 'video/mp4') {
