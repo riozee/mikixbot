@@ -13,7 +13,6 @@
     "minimist": "^1.2.5",
     "mongodb": "^4.2.2",
     "telegraf": "^4.5.2",
-    "vcard-creator": "^0.4.2",
-    "xfarr-api": "^1.0.3"
+    "vcard-creator": "^0.4.2"
   }
 }

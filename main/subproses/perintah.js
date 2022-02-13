@@ -2407,7 +2407,6 @@ const Perintah = {
                     const ukuranVideoMaksimal = ukuranMaksimal.video[$.platform],
                         ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
                     const { file, size } = await saveFetchByStream(f, 'mp4', ukuranDokumenMaksimal);
-                    console.log(size);
                     if (size < ukuranVideoMaksimal)
                         return {
                             video: { file: file },
