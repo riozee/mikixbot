@@ -1372,6 +1372,7 @@ const Perintah = {
                     url: v.url,
                     size: v.size,
                     quality: v.quality,
+                    o: o,
                 })),
             });
             return {
@@ -1380,6 +1381,7 @@ const Perintah = {
             };
         },
         hd: async (waiter, $, data, o = {}) => {
+            if (!o.command) o = waiter.val.o;
             const MIME = o.mimetype || 'audio/mp3',
                 EXT = o.extension || 'mp3',
                 MEDIA = o.media || 'audio',
@@ -1388,7 +1390,7 @@ const Perintah = {
                 try {
                     if (size > ukuranMaksimal.dokumen[$.platform]) throw 'toobig';
                     const { file, size: _size } = await saveFetchByStream(await fetch(link), EXT, ukuranMaksimal.dokumen[$.platform]);
-                    if (size < ukuranMaksimal.audio[$.platform])
+                    if (size < ukuranMaksimal[MEDIA][$.platform])
                         return {
                             [MEDIA]: { file: file },
                             _limit: cekLimit($, data),
