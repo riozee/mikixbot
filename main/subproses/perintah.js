@@ -1362,7 +1362,7 @@ const Perintah = {
             if (!REGLINK.test($.argumen)) return { teks: $.TEKS('command/' + CMD), saran: ['/menu downloader', '/help'] };
             $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const { medias } = await aioVideoDl($.argumen);
-            const mp3s = medias.filter();
+            const mp3s = medias.filter(FILTER);
             if (!mp3s.length) return { teks: $.TEKS('command/' + CMD + '/notfound') };
             if (mp3s.length === 1) {
                 return await Perintah.ytaudio2.hd({ url: mp3s[0].url, size: mp3s[0].size }, $, data, o);
