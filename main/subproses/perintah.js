@@ -86,6 +86,9 @@ async function proses(pesan) {
     }
     if ($.pengirim.endsWith('#C')) {
         if (data.c) {
+            if (data.c?.adminonly) {
+                if (!(await isAdmin($))) return;
+            }
             if (data.c.gname !== $.gname) {
                 DB.perbarui({ _id: $.pengirim }, { $set: { gname: $.gname } });
             }
@@ -3692,6 +3695,24 @@ const Perintah = {
                 return {
                     teks: $.TEKS('command/$noimage'),
                 };
+            }
+        },
+    },
+    setadminonly: {
+        stx: '/setadminonly',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+            if (data.c.adminonly) {
+                const { _e } = await DB.perbarui({ _id: data.c.id }, { $unset: { adminonly: 1 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setadminonly/off'), saran: ['/setadminonly'] };
+            } else {
+                const { _e } = await DB.perbarui({ _id: data.c.id }, { $set: { adminonly: 1 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setadminonly/on'), saran: ['/setadminonly'] };
             }
         },
     },
