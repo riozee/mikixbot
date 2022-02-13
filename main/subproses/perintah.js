@@ -2556,6 +2556,7 @@ const Perintah = {
                 mimetype: 'video/mp4',
                 media: 'video',
                 filter: (v) => v.extension === 'mp4' && v.quality === 'watermark',
+                regexlink: /^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//,
             });
         },
     },
@@ -2599,6 +2600,7 @@ const Perintah = {
                 mimetype: 'video/mp4',
                 media: 'video',
                 filter: (v) => v.extension === 'mp4' && v.quality === 'hd',
+                regexlink: /^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//,
             });
         },
     },
@@ -2630,6 +2632,7 @@ const Perintah = {
                 mimetype: 'audio/mp3',
                 media: 'audio',
                 filter: (v) => v.extension === 'mp3',
+                regexlink: /^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//,
             });
         },
     },
