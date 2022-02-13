@@ -2148,7 +2148,7 @@ const Perintah = {
             if (!$.argumen) return { teks: $.TEKS('command/otakudesu'), saran: ['/menu searching', '/help'] };
             let res;
             if (/^(https?:\/\/)?(www\.)?otakudesu\.moe\//.test($.argumen.trim())) {
-                res = await (await lolHumanAPI('otakudesu', 'url=' + encodeURI($.argumen.trim()))).json();
+                res = await (await lolHumanAPI('otakudesu', 'url=' + encodeURI(($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen).trim()))).json();
             } else {
                 res = await (await lolHumanAPI('otakudesusearch', 'query=' + encodeURI($.argumen.trim()))).json();
             }
@@ -2198,7 +2198,7 @@ const Perintah = {
             if (!$.argumen) return { teks: $.TEKS('command/kusonime'), saran: ['/menu downloader', '/help'] };
             let res;
             if (/^(https?:\/\/)?(www\.)?kusonime\.com\//.test($.argumen.trim())) {
-                res = await (await lolHumanAPI('kusonime', 'url=' + encodeURI($.argumen.trim()))).json();
+                res = await (await lolHumanAPI('kusonime', 'url=' + encodeURI(($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen).trim()))).json();
             } else {
                 res = await (await lolHumanAPI('kusonimesearch', 'query=' + encodeURI($.argumen.trim()))).json();
             }
@@ -2315,7 +2315,7 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             if (!$.argumen) return { teks: $.TEKS('command/spotifydl'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.|open\.)?spotify\.com\//.test($.argumen)) return { teks: $.TEKS('command/spotifydl') };
-            const res = await (await lolHumanAPI('spotify', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('spotify', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const ukuranAudioMaksimal = ukuranMaksimal.audio[$.platform],
                 ukuranDokumenMaksimal = ukuranMaksimal.dokumen[$.platform];
@@ -2342,7 +2342,7 @@ const Perintah = {
             if (waiter.val) return waiter.tolak();
             if (!$.argumen) return { teks: $.TEKS('command/twittervideo'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.)?twitter\.com\//.test($.argumen)) return { teks: $.TEKS('command/twittervideo'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('twitter2', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('twitter2', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const reso = Object.fromEntries(res.result.link.map((v) => [new URL(v.url).pathname.split('/')[5].split('x')[1] + 'p', v.url]));
             waiter.tambahkan($.pengirim, ['twittervideo'], reso);
@@ -2397,7 +2397,7 @@ const Perintah = {
             if (waiter.val) return waiter.tolak();
             if (!$.argumen) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.)?instagram\.com\//.test($.argumen)) return { teks: $.TEKS('command/instagramdl'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('instagram', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('instagram', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) {
                 res.result = (await aioVideoDl($.argumen)).medias.map((v) => v.url);
             }
@@ -2538,7 +2538,7 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             if (!$.argumen) return { teks: $.TEKS('command/tiktokvideo'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokvideo'), saran: ['/menu downloader', '/help'] };
-            const f = await lolHumanAPI('tiktokwm', 'url=' + encodeURI($.argumen));
+            const f = await lolHumanAPI('tiktokwm', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen));
             if (f.status != 200) throw `${f.status} tiktokwm`;
             const { file } = await saveFetchByStream(f, 'mp4');
             return {
@@ -2575,7 +2575,7 @@ const Perintah = {
             const endpoints = _.shuffle(['tiktok', 'tiktok2', 'tiktok3']);
             for (const endpoint of endpoints) {
                 e = endpoint;
-                res = await (await lolHumanAPI(endpoint, 'url=' + encodeURI($.argumen))).json();
+                res = await (await lolHumanAPI(endpoint, 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
                 if (res.status == 200) break;
             }
             if (res.status != 200) throw `${res.status} ${res.message} ${e}`;
@@ -2614,7 +2614,7 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             if (!$.argumen) return { teks: $.TEKS('command/tiktokaudio'), saran: ['/menu downloader', '/help'] };
             if (!/^(https?:\/\/)?(www\.|(t|vt|vm)\.)?tiktok\.com\//.test($.argumen)) return { teks: $.TEKS('command/tiktokaudio'), saran: ['/menu downloader', '/help'] };
-            const f = await lolHumanAPI('tiktokmusic', 'url=' + encodeURI($.argumen));
+            const f = await lolHumanAPI('tiktokmusic', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen));
             if (f.status != 200) throw `${f.status} tiktokmusic`;
             const { file } = await saveFetchByStream(f, 'mp3');
             return {
@@ -2645,7 +2645,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\.)?mediafire\.com\//.test($.argumen)) return { teks: $.TEKS('command/mediafiredl'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('mediafire', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('mediafire', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.link;
             const f = await fetch(link);
@@ -2670,7 +2670,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\d+\.)?zippyshare\.com\//.test($.argumen)) return { teks: $.TEKS('command/zippysharedl'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('zippyshare', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('zippyshare', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.download_url;
             const f = await fetch(link);
@@ -2695,7 +2695,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestimage'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('pinterestdl', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('pinterestdl', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = Object.entries(res.result).sort((a, b) => b[0] - a[0])[0][1];
             const f = await fetch(link);
@@ -2715,7 +2715,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(\w+\.)?pinterest\.com\//.test($.argumen)) return { teks: $.TEKS('command/pinterestvideo'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('pinterestvideo', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('pinterestvideo', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = Object.entries(res.result).sort((a, b) => b[0] - a[0])[0][1];
             const f = await fetch(link);
@@ -2749,7 +2749,7 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\.)?sharechat\.com\/video\//.test($.argumen))
                 return { teks: $.TEKS('command/sharechatvideo'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('sharechat', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('sharechat', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.link_dl;
             const f = await fetch(link);
@@ -2782,7 +2782,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\.)?sck\.io\/p/.test($.argumen)) return { teks: $.TEKS('command/snackvideo'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('snackvideo', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('snackvideo', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.link_dl;
             const f = await fetch(link);
@@ -2801,7 +2801,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smulevideo'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.video;
             const f = await fetch(link);
@@ -2820,7 +2820,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\.)?smule\.com\//.test($.argumen)) return { teks: $.TEKS('command/smuleaudio'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('smule', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.audio;
             const f = await fetch(link);
@@ -2840,7 +2840,7 @@ const Perintah = {
             if (limit.val === 0) return limit.habis;
             if (!/^(https?:\/\/)?(www\.)?(icocofun\.com|i\.coco\.fun)\//.test($.argumen))
                 return { teks: $.TEKS('command/cocofun'), saran: ['/menu downloader', '/help'] };
-            const res = await (await lolHumanAPI('cocofun', 'url=' + encodeURI($.argumen))).json();
+            const res = await (await lolHumanAPI('cocofun', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             const link = res.result.withwm;
             const f = await fetch(link);
@@ -3636,6 +3636,38 @@ const Perintah = {
             if (isNaN(n) || n <= 0 || n > cache.data.broadcast?.length || 0) return { teks: 'err: index' };
             cache.data.broadcast.splice(n - 1, 1);
             return { teks: $.TEKS('command/deletebroadcast/done').replace('%id', n) };
+        },
+    },
+    bypassouo: {
+        stx: '/bypassouo [link]',
+        cat: 'tools',
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen || !/^(https?:\/\/)?ouo\.io\//.test($.argumen)) return { teks: $.TEKS('command/bypassouo') };
+            const res = await await lolHumanAPI('ouo', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen));
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+                _limit: limit,
+            };
+        },
+    },
+    bypassmirroredto: {
+        stx: '/bypassmirroredto [link]',
+        cat: 'tools',
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen || !/^(https?:\/\/)?(www\.)?mirrored\.to\//.test($.argumen)) return { teks: $.TEKS('command/bypassmirroredto') };
+            const res = await await lolHumanAPI('mirrorcreator', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen));
+            if (res.status != 200) throw res.message;
+            return {
+                teks: Object.entries(res.result)
+                    .map((v) => v.join(': '))
+                    .join('\n'),
+                _limit: limit,
+            };
         },
     },
 };
