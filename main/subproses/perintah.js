@@ -1372,8 +1372,8 @@ const Perintah = {
                     url: v.url,
                     size: v.size,
                     quality: v.quality,
-                    o: o,
                 })),
+                o: o,
             });
             return {
                 teks: $.TEKS('command/' + CMD + '/result').replace('%r', mp3s.map((v) => `/${v.quality} => ${v.quality.toUpperCase()}`).join('\n')),
