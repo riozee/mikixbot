@@ -3592,9 +3592,9 @@ async function aioVideoDl(link) {
         })
     ).text();
     const token = cheerio.load(html)('#token').attr('value');
-    const form = new FormData();
-    form.append('url', link);
-    form.append('token', token);
+    // const form = new FormData();
+    // form.append('url', link);
+    // form.append('token', token);
     const res = await (
         await fetch('https://aiovideodl.ml/wp-json/aio-dl/video-data/', {
             method: 'POST',
@@ -3603,7 +3603,7 @@ async function aioVideoDl(link) {
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 cookie: 'PHPSESSID=3893d5f173e91261118a1d8b2dc985c3; _ga=GA1.2.792478743.1635388171;',
             },
-            body: form,
+            body: { url: link, token: token },
         })
     ).json();
     console.log(res);
