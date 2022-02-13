@@ -3606,6 +3606,7 @@ async function aioVideoDl(link) {
             body: form,
         })
     ).json();
+    console.log(res);
     return res;
 }
 
