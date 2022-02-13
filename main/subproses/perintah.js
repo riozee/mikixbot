@@ -3645,7 +3645,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!$.argumen || !/^(https?:\/\/)?ouo\.io\//.test($.argumen)) return { teks: $.TEKS('command/bypassouo') };
-            const res = await await lolHumanAPI('ouo', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen));
+            const res = await (await lolHumanAPI('ouo', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             return {
                 teks: res.result,
@@ -3660,7 +3660,7 @@ const Perintah = {
             const limit = cekLimit($, data);
             if (limit.val === 0) return limit.habis;
             if (!$.argumen || !/^(https?:\/\/)?(www\.)?mirrored\.to\//.test($.argumen)) return { teks: $.TEKS('command/bypassmirroredto') };
-            const res = await await lolHumanAPI('mirrorcreator', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen));
+            const res = await (await lolHumanAPI('mirrorcreator', 'url=' + encodeURI($.argumen.startsWith('http') ? $.argumen : 'https://' + $.argumen))).json();
             if (res.status != 200) throw res.message;
             return {
                 teks: Object.entries(res.result)
@@ -3668,6 +3668,31 @@ const Perintah = {
                     .join('\n'),
                 _limit: limit,
             };
+        },
+    },
+    ocr: {
+        stx: '/ocr',
+        cat: 'tools',
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if ($.gambar || $.q?.gambar) {
+                const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
+                const { size } = await fsp.stat(file);
+                const form = new FormData();
+                const stream = fs.createReadStream(file);
+                form.append('img', stream, { knownLength: size });
+                const res = await (await postToLolHumanAPI('ocr', form)).json();
+                if (res.status != 200) throw res.message;
+                return {
+                    teks: res.result,
+                    _limit: limit,
+                };
+            } else {
+                return {
+                    teks: $.TEKS('command/$noimage'),
+                };
+            }
         },
     },
 };
