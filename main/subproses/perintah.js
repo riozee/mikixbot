@@ -2546,6 +2546,19 @@ const Perintah = {
             };
         },
     },
+    tiktokvideo2: {
+        stx: '/tiktokvideo2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'tiktokvideo2',
+                extension: 'mp4',
+                mimetype: 'video/mp4',
+                media: 'video',
+                filter: (v) => v.extension === 'mp4' && v.quality === 'watermark',
+            });
+        },
+    },
     tiktokvideonowm: {
         stx: '/tiktokvideoNoWM [link]',
         cat: 'downloader',
@@ -2576,6 +2589,19 @@ const Perintah = {
             };
         },
     },
+    tiktokvideonowm2: {
+        stx: '/tiktokvideonowm2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'tiktokvideonowm2',
+                extension: 'mp4',
+                mimetype: 'video/mp4',
+                media: 'video',
+                filter: (v) => v.extension === 'mp4' && v.quality === 'hd',
+            });
+        },
+    },
     tiktokaudio: {
         stx: '/tiktokaudio [link]',
         cat: 'downloader',
@@ -2592,6 +2618,19 @@ const Perintah = {
                 audio: { file: file },
                 _limit: limit,
             };
+        },
+    },
+    tiktokaudio2: {
+        stx: '/tiktokaudio2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'tiktokaudio2',
+                extension: 'mp3',
+                mimetype: 'audio/mp3',
+                media: 'audio',
+                filter: (v) => v.extension === 'mp3',
+            });
         },
     },
     mediafiredl: {
