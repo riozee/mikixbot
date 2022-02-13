@@ -1357,11 +1357,12 @@ const Perintah = {
             const CMD = o.command || 'ytaudio2',
                 REGLINK = o.regexlink || /^(https?:\/\/)?(www\.)?youtu(\.be|be\.com)/,
                 EXT = o.extension || 'mp3';
+            const FILTER = o.filter || ((v) => v.extension === EXT);
             if (!$.argumen) return { teks: $.TEKS('command/' + CMD), saran: ['/menu downloader', '/help'] };
             if (!REGLINK.test($.argumen)) return { teks: $.TEKS('command/' + CMD), saran: ['/menu downloader', '/help'] };
             $.argumen = /^(https?:\/\/)/.test($.argumen) ? $.argumen : 'https://' + $.argumen;
             const { medias } = await aioVideoDl($.argumen);
-            const mp3s = medias.filter((v) => v.extension === EXT);
+            const mp3s = medias.filter();
             if (!mp3s.length) return { teks: $.TEKS('command/' + CMD + '/notfound') };
             if (mp3s.length === 1) {
                 return await Perintah.ytaudio2.hd({ url: mp3s[0].url, size: mp3s[0].size }, $, data, o);
@@ -1464,6 +1465,7 @@ const Perintah = {
                 extension: 'mp4',
                 mimetype: 'video/mp4',
                 media: 'video',
+                filter: (v) => v.extension === 'mp4' && v.audioAvailable === true,
             });
         },
     },
