@@ -12,7 +12,6 @@ const FormData = require('form-data');
 const mimetypes = require('mime-types');
 const gif = require('../alat/gif_konversi');
 const webp = require('../alat/webp_konversi');
-const xFar = require('xfarr-api');
 const cheerio = require('cheerio');
 
 //////////////////// VARS
