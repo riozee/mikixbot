@@ -78,7 +78,7 @@ async function proses(pesan) {
 
     const $ = pesan._;
     $.platform = pesan.d;
-    $.bahasa = data.c?.lang || ($.pengirim.endsWith('#C') ? 0 : data.i?.lang) || 'id';
+    $.bahasa = bahasa($.pengirim, data.c, data.i);
     $.TEKS = (teks) => TEKS[$.bahasa][teks];
     $.id = data.i ? data.i._id : null;
     if ($.platform === 'TG' && $.id && data.u.tg_name !== $.tg_name) {
@@ -104,6 +104,12 @@ async function proses(pesan) {
         }
     }
 
+    ////////// BIND
+    if (!$.pengirim.endsWith('#C') && $.teks && $.teks.startsWith('bind:code=') && /^bind:code=[a-z0-9]+$/.test($.teks)) {
+        if (cache.data.broadcast?.length) await broadcast(pesan);
+        bind($, data);
+    }
+
     ////////// CHAT ID MIGRATE
     if ($.migrateChatID) {
         kirimPesan($.penerima, {
@@ -124,11 +130,6 @@ async function proses(pesan) {
     ////////// PERINTAH
     else if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&\:.][a-zA-Z0-9]+\s*/.test($.teks)) {
         perintah(pesan, data);
-    }
-    ////////// BIND
-    else if (!$.pengirim.endsWith('#C') && $.teks && $.teks.startsWith('bind:code=') && /^bind:code=[a-z0-9]+$/.test($.teks)) {
-        if (cache.data.broadcast?.length) await broadcast(pesan);
-        bind($, data);
     }
     ////////// SIMSIMI
     else if ((cache.data.simsimi ||= {})[$.pengirim]) {
@@ -330,14 +331,13 @@ async function anch(pesan, data) {
         }
         if (/^[\/\-\\><+_=|~!?@#$%^&.]/.test($.teks)) {
             const cmd = $.teks.slice(1).toLowerCase();
-            console.log(cmd);
             if (cmd === 'anext') {
+                kirimPesan(partner, { teks: TEKS[room.lang[partner]]['anonymouschat/partnerstoppeddialog'], saran: ['/asearch'] });
                 delete cache.data.anch.room[roomID];
                 _.pull(cache.data.anch.active, $.uid, partner);
-                kirimPesan(partner, { teks: $.TEKS('anonymouschat/partnerstoppeddialog'), saran: ['/asearch'] });
                 if (cache.data.anch.ready?.length) {
-                    const partnerID = _.sample(cache.data.anch.ready);
-                    _.pull(cache.data.anch.ready, partnerID);
+                    const { uid: partnerID, lang } = _.sample(cache.data.anch.ready);
+                    _.remove(cache.data.anch.ready, { uid: partnerID });
                     if (pesan.d === 'WA') {
                         IPC.kirimSinyal('WA', {
                             anch: {
@@ -352,20 +352,33 @@ async function anch(pesan, data) {
                     cache.data.anch.room[newRoomID] = {
                         [$.uid]: partnerID,
                         [partnerID]: $.uid,
+                        lang: {
+                            [$.uid]: $.bahasa,
+                            [partnerID]: lang,
+                        },
                     };
                     cache.data.anch.active.push($.uid, partnerID);
-                    kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound').replace('%p', $.platform).replace('%i', newRoomID), saran: ['/anext', '/astop'] });
+                    kirimPesan(partnerID, {
+                        teks: TEKS[lang]['anonymouschat/partnerfound'].replace('%p', $.platform).replace('%i', newRoomID).replace('%l', $.bahasa),
+                        saran: ['/anext', '/astop'],
+                    });
                     kirimPesan($.uid, {
-                        teks: $.TEKS('anonymouschat/partnerfound').replace('%p', partnerID.split('#')[0]).replace('%i', newRoomID),
+                        teks: $.TEKS('anonymouschat/partnerfound').replace('%p', partnerID.split('#')[0]).replace('%i', newRoomID).replace('%l', lang),
                         saran: ['/anext', '/astop'],
                     });
                 } else {
-                    if (!cache.data.anch.ready) cache.data.anch.ready = [];
-                    cache.data.anch.ready.push($.uid);
+                    cache.data.anch ||= {};
+                    cache.data.anch.ready ||= [];
+                    cache.data.anch.ready.push({
+                        uid: $.uid,
+                        lang: $.bahasa,
+                    });
                     kirimPesan($.uid, { teks: $.TEKS('anonymouschat/findingpartner'), saran: ['/astop'] });
                 }
                 return;
             } else if (cmd === 'astop') {
+                kirimPesan($.uid, { teks: $.TEKS('anonymouschat/stoppingdialog'), saran: ['/asearch'] });
+                kirimPesan(partner, { teks: TEKS[room.lang[partner]]['anonymouschat/partnerstoppeddialog'], saran: ['/asearch'] });
                 delete cache.data.anch.room[roomID];
                 _.pull(cache.data.anch.active, $.uid, partner);
                 if (pesan.d === 'WA') {
@@ -375,8 +388,6 @@ async function anch(pesan, data) {
                         },
                     });
                 }
-                kirimPesan($.uid, { teks: $.TEKS('anonymouschat/stoppingdialog'), saran: ['/asearch'] });
-                kirimPesan(partner, { teks: $.TEKS('anonymouschat/partnerstoppeddialog'), saran: ['/asearch'] });
                 return;
             }
         }
@@ -431,7 +442,7 @@ async function anch(pesan, data) {
                     if ($.teks) {
                         msg.teks = $.teks;
                     } else {
-                        msg.teks = $.TEKS('anonymouschat/messagenotsupported');
+                        msg.teks = TEKS[room.lang[partner]]['anonymouschat/messagenotsupported'];
                     }
                 }
             }
@@ -476,7 +487,7 @@ async function anch(pesan, data) {
                     if ($.teks) {
                         msg.teks = $.teks;
                     } else {
-                        msg.teks = $.TEKS('anonymouschat/messagenotsupported');
+                        msg.teks = msg.teks = TEKS[room.lang[partner]]['anonymouschat/messagenotsupported'];
                     }
                 }
             }
@@ -676,8 +687,8 @@ const Perintah = {
         fn: async ($) => {
             if ($.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/privateonly') };
             if (cache.data.anch?.ready?.length) {
-                const partnerID = _.sample(cache.data.anch.ready);
-                _.pull(cache.data.anch.ready, partnerID);
+                const { uid: partnerID, lang } = _.sample(cache.data.anch.ready);
+                _.remove(cache.data.anch.ready, { uid: partnerID });
                 const d = new Date();
                 const roomID =
                     (+`${d.getUTCFullYear()}${d.getUTCMonth()}${d.getUTCDate()}${d.getUTCHours()}${d.getUTCMinutes()}${d.getUTCSeconds()}`).toString(36) +
@@ -686,15 +697,28 @@ const Perintah = {
                 cache.data.anch.room[roomID] = {
                     [$.uid]: partnerID,
                     [partnerID]: $.uid,
+                    lang: {
+                        [$.uid]: $.bahasa,
+                        [partnerID]: lang,
+                    },
                 };
                 if (!cache.data.anch.active) cache.data.anch.active = [];
                 cache.data.anch.active.push($.uid, partnerID);
-                kirimPesan(partnerID, { teks: $.TEKS('anonymouschat/partnerfound').replace('%p', $.platform).replace('%i', roomID), saran: ['/anext', '/astop'] });
-                return { teks: $.TEKS('anonymouschat/partnerfound').replace('%p', partnerID.split('#')[0]).replace('%i', roomID), saran: ['/anext', '/astop'] };
+                kirimPesan(partnerID, {
+                    teks: TEKS[lang]['anonymouschat/partnerfound'].replace('%p', $.platform).replace('%i', roomID).replace('%l', $.bahasa),
+                    saran: ['/anext', '/astop'],
+                });
+                return {
+                    teks: $.TEKS('anonymouschat/partnerfound').replace('%p', partnerID.split('#')[0]).replace('%i', roomID).replace('%l', lang),
+                    saran: ['/anext', '/astop'],
+                };
             } else {
-                if (!cache.data.anch) cache.data.anch = {};
-                if (!cache.data.anch.ready) cache.data.anch.ready = [];
-                cache.data.anch.ready.push($.uid);
+                cache.data.anch ||= {};
+                cache.data.anch.ready ||= [];
+                cache.data.anch.ready.push({
+                    uid: $.uid,
+                    lang: $.bahasa,
+                });
                 return { teks: $.TEKS('anonymouschat/findingpartner'), saran: ['/astop'] };
             }
         },
@@ -703,8 +727,8 @@ const Perintah = {
         stx: '/astop',
         cat: 'anonymouschat',
         fn: ($) => {
-            if (cache.data.anch?.ready?.includes?.($.uid)) {
-                _.pull(cache.data.anch.ready, $.uid);
+            if (cache.data.anch?.ready?.find?.((v) => v.uid === $.uid)) {
+                _.remove(cache.data.anch.ready, { uid: $.uid });
                 return { teks: $.TEKS('anonymouschat/findingpartnercancelled') };
             }
             return { teks: $.TEKS('anonymouschat/notinanyroom'), saran: ['/asearch'] };
@@ -1315,7 +1339,7 @@ const Perintah = {
             if (!$.argumen) return { teks: $.TEKS('command/google'), saran: ['/menu searching', '/help'] };
             const res = await (await lolHumanAPI('gsearch', 'query=' + encodeURI($.argumen))).json();
             if (res.status != 200) throw res.message;
-            return { teks: res.result.map((v) => `• ${v.title}\n${v.link}\n${v.desc}`).join('\n\n') };
+            return { teks: res.result.map((v) => `» ${v.title}\n=> ${v.desc}\n${v.link}`).join('\n\n') };
         },
     },
     playstore: {
@@ -1710,9 +1734,12 @@ const Perintah = {
         stx: '/BTS',
         cat: 'randomimage',
         fn: async ($, data, { endpoint } = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
             const { file } = await saveFetchByStream(await lolHumanAPI(endpoint || 'random/bts'), 'jpg');
             return {
                 gambar: { file: file },
+                _limit: limit,
             };
         },
     },
@@ -1784,6 +1811,8 @@ const Perintah = {
         stx: '/waifu',
         cat: 'randomimage',
         fn: async ($, data, { endpoints } = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
             endpoints = endpoints || ['random/waifu', 'random2/waifu'];
             let f, e;
             for (const endpoint of endpoints) {
@@ -1795,6 +1824,7 @@ const Perintah = {
             const { file } = await saveFetchByStream(f, 'jpg');
             return {
                 gambar: { file: file },
+                _limit: limit,
             };
         },
     },
@@ -1817,7 +1847,7 @@ const Perintah = {
         cat: 'reactions',
         fn: async ($, { endpoint } = {}) => {
             const f = await lolHumanAPI(endpoint || 'random2/feed');
-            if (f.status != 200) throw `${res.status} ${endpoint}`;
+            if (f.status != 200) throw `${f.status} ${endpoint}`;
             if (f.headers.get('content-type') === 'image/gif') {
                 let { file } = await saveFetchByStream(f, 'gif');
                 if ($.platform === 'WA') {
@@ -1835,7 +1865,7 @@ const Perintah = {
                     gambar: { file: file },
                 };
             } else {
-                throw `not an image, received: ${res.headers.get('content-type')}`;
+                throw `not an image, received: ${f.headers.get('content-type')}`;
             }
         },
     },
@@ -3806,7 +3836,142 @@ const Perintah = {
             return { teks: $.TEKS('command/deleteautoresponse/done').replace('%f', _data.ares[idx - 1].t), saran: ['/autoresponselist'] };
         },
     },
+    checkapikey: {
+        stx: '/checkapikey',
+        cat: 'dev',
+        fn: async ($) => {
+            if (cekDev($.uid)) {
+                const res = await (await lolHumanAPI('checkapikey')).json();
+                if (res.status != 200) throw res.message;
+                return {
+                    teks: Object.entries(res.result)
+                        .map((v) => `${v[0]}: ${v[1]}`)
+                        .join('\n'),
+                };
+            }
+        },
+    },
+    urbandictionary: {
+        stx: '/urbandictionary [word]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/urbandictionary'), saran: ['/menu searching', '/help'] };
+            const res = await (await lolHumanAPI('urdict', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result
+                    .map(
+                        (v) =>
+                            `(${v.thumbs_up || 0}/${v.thumbs_down || 0}, ${new Date(v.written_on).toLocaleDateString()}, @${v.author})\n» ${v.word} => ${
+                                v.definition
+                            }\n=> ${v.example}`
+                    )
+                    .join('\n\n'),
+            };
+        },
+    },
+    lyric: {
+        stx: '/lyric [song]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/lyric'), saran: ['/menu searching', '/help'] };
+            const res = await (await lolHumanAPI('lirik', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    chord: {
+        stx: '/chord [song]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/chord'), saran: ['/menu searching', '/help'] };
+            const res = await (await lolHumanAPI('chord', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result.chord,
+            };
+        },
+    },
+    cekresi: {
+        stx: '/cekresi [exp] [resi]',
+        cat: 'tools',
+        fn: async ($) => {
+            if (!$.argumen || !$.args[1]) return { teks: $.TEKS('command/cekresi'), saran: ['/menu tools', '/help'] };
+            const res = await (await lolHumanAPI('resi/' + $.args[0].toLowerCase() + '/' + $.args[1])).json();
+            if (res.status != 200) {
+                if (res.status == 404) return { teks: $.TEKS('command/cekresi/notfound') };
+                throw res.message;
+            }
+            return {
+                teks: res.result.history.map((v) => `» ${v.time}\n• ${v.position}\n${v.desc}`).join('\n\n'),
+            };
+        },
+    },
+    indbeasiswa: {
+        stx: '/indbeasiswa',
+        cat: 'information',
+        fn: async () => {
+            const res = await (await lolHumanAPI('indbeasiswa')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result.map((v) => `» ${v.title}\n${v.link}`).join('\n\n'),
+            };
+        },
+    },
+    turnbackhoax: {
+        stx: '/turnbackhoax',
+        cat: 'information',
+        fn: async () => {
+            const res = await (await lolHumanAPI('turnbackhoax')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result.map((v) => `» ${v.title}\n${v.link}`).join('\n\n'),
+            };
+        },
+    },
+    ipaddress: {
+        stx: '/ipaddress [ip]',
+        cat: 'tools',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/ipaddress'), saran: ['/menu tools', '/help'] };
+            const res = await (await lolHumanAPI('ipaddress/' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: Object.entries(res.result)
+                    .map((v) => `${v[0]}: ${v[1]}`)
+                    .join('\n'),
+            };
+        },
+    },
+    gsmarena: {
+        stx: '/gsmarena [phone]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/gsmarena'), saran: ['/menu searching', '/help'] };
+            const res = await (await lolHumanAPI('gsmarena', 'query=' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result.phone_image ? { url: res.result.phone_image } : undefined,
+                teks:
+                    `${res.result.phone_name}\n\n` +
+                    Object.entries(res.result.specification)
+                        .map(
+                            (v) =>
+                                `» ${v[0]}\n${Object.entries(v[1])
+                                    .map((v) => `${v[0]}: ${v[1]}`)
+                                    .join('\n')}`
+                        )
+                        .join('\n\n'),
+            };
+        },
+    },
 };
+
+function bahasa(pengirim, c, i) {
+    return c?.lang || (pengirim.endsWith('#C') ? 0 : i?.lang) || 'id';
+}
 
 // thanks to XFar
 async function aioVideoDl(link) {

@@ -100,6 +100,8 @@ function mulai() {
                 const teks = (typeof isi === 'string' ? isi : '') || isi.caption || isi.text || isi.singleSelectReply?.selectedRowId || isi.selectedDisplayText || '';
                 if (teks) _.teks = teks;
 
+                if (isi.selectedButtonId) _.idRespon = isi.selectedButtonId;
+
                 if (tipe === 'imageMessage') {
                     _.gambar = {
                         id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|image`,

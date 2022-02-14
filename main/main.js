@@ -36,7 +36,6 @@ function mulaiProses(file) {
     log(0, file);
     logNoDev(0, file);
     proses2[file] = fork(file, [JSON.stringify(creds)], {
-        detached: true,
         windowsHide: true,
     });
     proses2[file].on('message', (pesan) => {
