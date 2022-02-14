@@ -3,7 +3,7 @@
 	"anonymouschat/findingpartnercancelled": "Mencari partner dibatalkan.",
 	"anonymouschat/messagenotsupported": "[[ Partner Anda mengirimkan pesan yang tidak kompatibel dengan aplikasi yang Anda gunakan. ]]",
 	"anonymouschat/notinanyroom": "Kamu sedang tidak berada dalam sesi Anonymous Chat.\n\n/asearch => mencari partner baru",
-	"anonymouschat/partnerfound": "Partner ditemukan!\n\n/anext => mencari partner baru\n/astop => berhenti",
+	"anonymouschat/partnerfound": "Partner ditemukan!\n\nPlatform: %p\nRoom ID: %i\n\n/anext => mencari partner baru\n/astop => berhenti",
 	"anonymouschat/partnerstoppeddialog": "Partner kamu telah menghentikan percakapan.\n\n/asearch => mencari partner baru",
 	"anonymouschat/sendingfailed": "[[ Gagal meneruskan pesan tersebut ke partner. Silakan coba lagi. ]]",
 	"anonymouschat/stoppingdialog": "Kamu telah menghentikan percakapan.\n\n/asearch => mencari partner baru",

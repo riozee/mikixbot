@@ -98,7 +98,7 @@ async function proses(pesan) {
 
     if ($.teks && (data.c || data.i)?.ares) {
         for (const { t, r } of (data.c || data.i)?.ares) {
-            if (new RegExp(`(\\s|^)${_.escapeRegExp(t)}(\\s|$)`, 'i').test($.teks)) {
+            if (new RegExp(`([^a-z]|^)${_.escapeRegExp(t)}([^a-z]|$)`, 'i').test($.teks)) {
                 kirimPesan($.pengirim, { teks: r, re: true, mid: $.mid });
             }
         }
@@ -527,16 +527,18 @@ async function validasiUser($, data) {
 }
 
 function cekLimit($, data) {
-    const now = Date.now();
-    if (!cache.data.usrlimit) cache.data.usrlimit = { update: now };
+    const now = Date.now(),
+        id = $.id || $.uid;
+    cache.data.usrlimit ||= { update: now };
     const usrlimit = cache.data.usrlimit;
     if (usrlimit.update < now - (now % 86_400_000)) cache.data.usrlimit = { update: now };
+    usrlimit[id] ??= 2;
     return {
-        val: cekPremium($, data) ? Infinity : usrlimit[$.id] ?? (usrlimit[$.id] = 2),
+        val: cekPremium($, data) ? Infinity : usrlimit[id],
         kurangi: () => {
-            if (!data.i?.premlvl && usrlimit[$.id || $.uid] > 0) {
-                usrlimit[$.id || $.uid] -= 1;
-                return kirimPesan($.pengirim, { teks: $.TEKS('user/limitnotice').replace('%lim', usrlimit[$.id || $.uid]), re: true, mid: $.mid, saran: ['/pricing'] });
+            if (!data.i?.premlvl && usrlimit[id] > 0) {
+                usrlimit[id]--;
+                return kirimPesan($.pengirim, { teks: $.TEKS('user/limitnotice').replace('%lim', usrlimit[id]), re: true, mid: $.mid, saran: ['/pricing'] });
             }
         },
         habis: { teks: $.TEKS('user/limitreached'), saran: ['/pricing'] },
@@ -619,7 +621,6 @@ async function perintah(pesan, data) {
                 ...res,
             };
             log(5, hasil);
-            logPesan(pesan.d, hasil, true);
             let { s, _e } = await _kirimPesan($.pengirim, hasil);
             if (s === false) throw _e || s;
             if (lim) lim.kurangi();
@@ -3948,17 +3949,23 @@ function unduh(penerima, media) {
 }
 
 function kirimPesan(penerima, pesan) {
-    return IPC.kirimSinyal(penerima.split('#')[0], {
+    const id = penerima.split('#')[0];
+    const msg = {
         penerima: penerima,
         ...pesan,
-    });
+    };
+    logPesan(id, pesan, true);
+    return IPC.kirimSinyal(id, msg);
 }
 
 function _kirimPesan(penerima, pesan) {
-    return IPC.kirimKueri(penerima.split('#')[0], {
+    const id = penerima.split('#')[0];
+    const msg = {
         penerima: penerima,
         ...pesan,
-    });
+    };
+    logPesan(id, pesan, true);
+    return IPC.kirimKueri(id, msg);
 }
 
 function cekDev(id) {
