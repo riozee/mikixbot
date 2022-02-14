@@ -25,7 +25,7 @@ const subproses = [
     './main/subproses/perintah.js',
     './main/subproses/rss.js',
     './main/subproses/statistic.js',
-    // './main/subproses/bot/whatsapp.js',
+    './main/subproses/bot/whatsapp.js',
     './main/subproses/bot/telegram.js',
 ];
 for (const proses of subproses) {

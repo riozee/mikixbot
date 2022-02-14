@@ -639,7 +639,6 @@ async function perintah(pesan, data) {
                 teks: $.TEKS('system/error').replace('%e', errId),
                 saran: ['/report ' + errId],
             };
-            logPesan(pesan.d, hasil, true);
             kirimPesan($.pengirim, hasil);
             for (const id in cache.data.errors) {
                 if (Date.now() - cache.data.errors[id].t > 86_400_000) delete cache.data.errors[id];
