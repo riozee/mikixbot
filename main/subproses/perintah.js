@@ -15,12 +15,26 @@ const webp = require('../alat/webp_konversi');
 const cheerio = require('cheerio');
 const { default: wiki } = require('wikipedia');
 const { htmlToText } = require('html-to-text');
+const deepai = require('deepai');
+const gtts = require('node-gtts');
+const { searchPic } = require('iqdb-client');
+const randomCase = require('random-case');
+const QRReader = require('qrcode-reader');
+const jimp = require('jimp');
+const qrcode = require('qrcode');
+const kuromoji = require('kuromoji');
+const wanakana = require('wanakana');
+const math = require('mathjs');
 
 //////////////////// VARS
 
 const creds = JSON.parse(fs.readFileSync('./creds.json'));
 const admin = creds.tg_admin_id;
 const TEKS = {};
+
+deepai.setApiKey(creds.deepaiAPIkey);
+let kuromojiTokenizer;
+kuromoji.builder({ dicPath: './node_modules/kuromoji/dict' }).build((_, tokenizer) => (kuromojiTokenizer = tokenizer));
 
 for (const file of fs.readdirSync('./res/teks')) {
     TEKS[file.replace('.json', '')] = JSON.parse(fs.readFileSync('./res/teks/' + file));
@@ -2182,11 +2196,15 @@ const Perintah = {
                 const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
                 const { size } = await fsp.stat(file);
                 const form = new FormData();
-                const stream = fs.createReadStream(file);
-                form.append('img', stream, { knownLength: size });
+                form.append('img', fs.createReadStream(file), { knownLength: size });
                 const res = await (await postToLolHumanAPI('wait', form)).json();
                 if (res.status != 200) {
-                    const res1 = await fetch();
+                    const form = new FormData();
+                    form.append('img', fs.createReadStream(file));
+                    const res1 = await fetch('https://api.trace.moe/search?cutBorders&anilistInfo', {
+                        method: 'POST',
+                        body: form,
+                    });
                     if (res1.status != 200) throw res1;
                     res.result ||= {};
                     const r = res1.result[0];
@@ -4148,6 +4166,271 @@ const Perintah = {
                 if (_e) throw _e;
                 return { teks: $.TEKS('command/setgoodbyetext/done'), saran: ['/setgoodbye'] };
             }
+        },
+    },
+    waifu2x: {
+        stx: '/waifu2x',
+        cat: 'tools',
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if ($.gambar || $.q?.gambar) {
+                const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
+                // const form = new FormData();
+                // form.append('image', fs.createReadStream(file));
+                // const res = await fetch('https://api.deepai.org/api/waifu2x', {
+                //     method: 'POST',
+                //     headers: {
+                //         'Api-Key': 'd799690d-eaa0-4f49-88bd-d70868a0dc30',
+                //     },
+                //     body: form,
+                // });
+                // console.log(await res.json());
+                const res = await deepai.callStandardApi('waifu2x', {
+                    image: fs.createReadStream(file),
+                });
+                if (!res.output_url) throw res;
+                return {
+                    gambar: { url: res.output_url },
+                    _limit: limit,
+                };
+            } else {
+                return {
+                    teks: $.TEKS('command/$noimage'),
+                };
+            }
+        },
+    },
+    tts: {
+        stx: '/tts [lang] [text]',
+        cat: 'tools',
+        fn: async ($) => {
+            const languages = [
+                'af',
+                'sq',
+                'ar',
+                'hy',
+                'ca',
+                'zh',
+                'zh-cn',
+                'zh-tw',
+                'zh-yue',
+                'hr',
+                'cs',
+                'da',
+                'nl',
+                'en',
+                'en-au',
+                'en-uk',
+                'en-us',
+                'eo',
+                'fi',
+                'fr',
+                'de',
+                'el',
+                'ht',
+                'hi',
+                'hu',
+                'is',
+                'id',
+                'it',
+                'ja',
+                'ko',
+                'la',
+                'lv',
+                'mk',
+                'no',
+                'pl',
+                'pt',
+                'pt-br',
+                'ro',
+                'ru',
+                'sr',
+                'sk',
+                'es',
+                'es-es',
+                'es-us',
+                'sw',
+                'sv',
+                'ta',
+                'th',
+                'tr',
+                'vi',
+                'cy',
+            ];
+            if (!$.argumen || !$.args[1]) return { teks: $.TEKS('command/tts'), saran: ['/ttslanguages', '/menu tools', '/help'] };
+            if (!languages.includes($.args[0].toLowerCase()))
+                return {
+                    teks: $.TEKS('command/tts/languagenotfound').replace('%c', $.args[0].toLowerCase()),
+                    saran: ['/ttslanguages', '/menu tools', '/help'],
+                };
+            const teks = $.args.slice(1).join(' ');
+            if (teks.length > 1096) return { teks: $.TEKS('command/tts/toolong').replace('%c', teks.length) };
+            const tts = gtts($.args[0].toLowerCase());
+            const file = './tmp/' + utils.namaFileAcak() + '.mp3';
+            return await new Promise((res) => {
+                tts.save(file, teks, () => {
+                    res({
+                        audio: { file: file },
+                    });
+                });
+            });
+        },
+    },
+    ttslanguages: {
+        stx: '/ttslanguages',
+        cat: 'tools',
+        fn: ($) => {
+            return {
+                teks: $.TEKS('command/ttslanguages'),
+            };
+        },
+    },
+    iqdb: {
+        stx: '/iqdb',
+        cat: 'tools',
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if ($.gambar || $.q?.gambar) {
+                const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
+                let result = await searchPic(fs.createReadStream(file), { lib: 'www' });
+                if (!result.ok) result = await searchPic(fs.createReadStream(file), { lib: 'www', forcegray: true });
+                if (result.ok && result.data[1]) {
+                    const res = result.data[1];
+                    return {
+                        gambar: result.data[1].img ? { url: 'https://iqdb.org' + result.data[1].img } : undefined,
+                        teks: `${res.head}\n\n» ${res.source?.join?.('/')}\n» https:${res.sourceUrl} (${res.size?.width || '-'}x${res.size?.height || '-'}) [${
+                            res.type
+                        }]`,
+                        _limit: limit,
+                    };
+                } else {
+                    return {
+                        teks: $.TEKS('command/iqdb/notfound'),
+                    };
+                }
+            } else {
+                return {
+                    teks: $.TEKS('command/$noimage'),
+                };
+            }
+        },
+    },
+    randomcase: {
+        stx: '/randomcase',
+        cat: 'tools',
+        fn: ($) => {
+            if (!$.arg) return { teks: $.TEKS('command/randomcase'), saran: ['/menu tools', '/help'] };
+            return {
+                teks: randomCase($.arg),
+            };
+        },
+    },
+    scanqr: {
+        stx: '/scanqr',
+        cat: 'tools',
+        fn: async ($, data) => {
+            if ($.gambar || $.q?.gambar) {
+                const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
+                const qr = new QRReader();
+                const media = await jimp.read(file);
+                const value = await new Promise((resolve) => {
+                    qr.callback = (err, v) => resolve(v);
+                    qr.decode(media.bitmap);
+                });
+                if (!value) return { teks: $.TEKS('command/scanqr/notfound') };
+                for (const point of value.points) {
+                    media.scan(Math.floor(point.x) - 10, Math.floor(point.y) - 10, 20, 20, function (x, y, idx) {
+                        this.bitmap.data[idx] = 255;
+                        this.bitmap.data[idx + 1] = 0;
+                        this.bitmap.data[idx + 2] = 0;
+                        this.bitmap.data[idx + 3] = 255;
+                    });
+                }
+                const out = './tmp/' + utils.namaFileAcak() + '.png';
+                await media.writeAsync(out);
+                return {
+                    gambar: { file: out },
+                    teks: value.result,
+                };
+            } else {
+                return {
+                    teks: $.TEKS('command/$noimage'),
+                };
+            }
+        },
+    },
+    generateqr: {
+        stx: '/generateqr [text]',
+        cat: 'tools',
+        fn: async ($) => {
+            if (!$.arg) return { teks: $.TEKS('command/generateqr'), saran: ['/menu tools', '/help'] };
+            const base64 = await qrcode.toDataURL($.arg, { scale: 8 });
+            const buffer = Buffer.from(base64.split(',')[1], 'base64');
+            const file = './tmp/' + utils.namaFileAcak() + '.jpg';
+            await fsp.writeFile(file, buffer);
+            return {
+                gambar: { file: file },
+            };
+        },
+    },
+    romaji: {
+        stx: '/romaji [text]',
+        cat: 'tools',
+        fn: async ($, data, { tipe, method } = {}) => {
+            if (!$.arg) return { teks: $.TEKS('command/' + tipe || 'romaji'), saran: ['/menu tools', '/help'] };
+            const token = kuromojiTokenizer.tokenize($.arg);
+            let tokenized = '';
+            for (const k of token) {
+                tokenized += (k.pronunciation || k.surface_form) + ' ';
+            }
+            let romaji = '';
+            if (tokenized.length > 250) {
+                for (const k of _.chunk(tokenized, 250)) {
+                    romaji += wanakana[method || 'toRomaji'](k);
+                }
+            } else {
+                romaji = wanakana[method || 'toRomaji'](tokenized);
+            }
+            return { teks: romaji };
+        },
+    },
+    katakana: {
+        stx: '/katakana [text]',
+        cat: 'tools',
+        fn: async ($, data) => {
+            return await Perintah.romaji.fn($, data, { tipe: 'katakana', method: 'toKatakana' });
+        },
+    },
+    hiragana: {
+        stx: '/katakana [text]',
+        cat: 'tools',
+        fn: async ($, data) => {
+            return await Perintah.romaji.fn($, data, { tipe: 'hiragana', method: 'toHiragana' });
+        },
+    },
+    math: {
+        stx: '/math [expr]',
+        cat: 'tools',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/math') };
+            let hasil;
+            try {
+                hasil = math.evaluate($.argumen.split(/\n+/));
+                if (hasil.values) {
+                    const formatted = [];
+                    for (const entry of hasil.values()) {
+                        formatted.push('» ' + (entry.syntax ?? entry));
+                    }
+                    hasil = formatted.join('\n');
+                }
+            } catch (e) {
+                hasil = $.TEKS('command/math/error').replace('%e', String(e));
+            }
+            return {
+                teks: hasil.toString(),
+            };
         },
     },
 };
