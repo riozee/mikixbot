@@ -26,6 +26,8 @@ bot.on('new_chat_members', (konteks) => {});
 
 bot.on('left_chat_member', (konteks) => {});
 
+bot.on('callback_query', (konteks) => {});
+
 bot.on(['message', 'channel_post'], async (konteks) => {
     if (konteks.channelPost) {
         konteks = {

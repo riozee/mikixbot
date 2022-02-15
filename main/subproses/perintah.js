@@ -13,6 +13,8 @@ const mimetypes = require('mime-types');
 const gif = require('../alat/gif_konversi');
 const webp = require('../alat/webp_konversi');
 const cheerio = require('cheerio');
+const { default: wiki } = require('wikipedia');
+const { htmlToText } = require('html-to-text');
 
 //////////////////// VARS
 
@@ -656,6 +658,13 @@ async function perintah(pesan, data) {
             }
         }
     } else {
+        if ($.idRespon) {
+            kirimPesan($.pengirim, {
+                teks: $.TEKS('system/endeddialogreply'),
+                re: true,
+                mid: $.mid,
+            });
+        }
         log(4, $.perintah);
         if (cache.data.simsimi[$.pengirim]) {
             simsimi($, data);
@@ -3965,6 +3974,68 @@ const Perintah = {
                         )
                         .join('\n\n'),
             };
+        },
+    },
+    wikipedialanguages: {
+        stx: '/wikipedialanguages',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!fs.existsSync('./data/wikipedialanguages.txt')) {
+                const text = (await wiki.languages())
+                    .map((v) =>
+                        Object.entries(v)
+                            .map((v) => `${v[0].toUpperCase()} » ${v[1]}`)
+                            .join('')
+                    )
+                    .join('\n');
+                await fsp.writeFile('./data/wikipedialanguages.txt', text);
+            }
+            return {
+                dokumen: { file: './data/wikipedialanguages.txt', namaFile: 'wikipedialanguages.txt', mimetype: 'text/plain' },
+            };
+        },
+    },
+    wikipedia: {
+        stx: '/wikipedia [lang] [query]',
+        cat: 'searchengine',
+        fn: async ($, data) => {
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            if (!$.argumen || !$.args[1]) return { teks: $.TEKS('command/wikipedia'), saran: ['/wikipedialanguages', '/menu searching', '/help'] };
+            if (!(await wiki.languages()).find((v) => v[$.args[0].toLowerCase()]))
+                return {
+                    teks: $.TEKS('command/wikipedia/languagenotfound').replace('%l', $.args[0].toLowerCase()),
+                    saran: ['/wikipedialanguages', '/menu searching', '/help'],
+                };
+            wiki.setLang($.args[0].toLowerCase());
+            const { results, suggestion } = await wiki.search($.args.slice(1).join(' '));
+            if (results.length) {
+                waiter.tambahkan($.pengirim, ['wikipedia'], {
+                    res: results.map((v) => v.title),
+                    lang: $.args[0].toLowerCase(),
+                });
+                return {
+                    teks: `${suggestion ? $.TEKS('command/wikipedia/suggestion').replace('%s', suggestion) + '\n\n' : ''}${$.TEKS('command/wikipedia/result').replace(
+                        '%r',
+                        results.map((v, i) => `/${i + 1} => ${v.title}`).join('\n')
+                    )}`,
+                    saran: ['/1', '/2', '/cancel'],
+                };
+            } else {
+                return { teks: $.TEKS('command/wikipedia/notfound') };
+            }
+        },
+        hd: async (waiter, $) => {
+            const idx = parseInt($.perintah) - 1;
+            if (waiter.val.res[idx]) {
+                wiki.setLang(waiter.val.lang);
+                return waiter.selesai({
+                    dokumen: { url: await wiki.pdf(waiter.val.res[idx]), namaFile: waiter.val.res[idx], mimetype: 'application/pdf' },
+                });
+            } else {
+                if ($.perintah === 'cancel') return waiter.selesai({ teks: $.TEKS('user/dialogcancelled').replace('%d', 'wikipedia') });
+                return waiter.notice('cancel', 'wikipedia');
+            }
         },
     },
 };
