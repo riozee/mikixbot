@@ -38,6 +38,33 @@ setInterval(() => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.dat
 
 //////////////////// UTAMA
 
+async function greeter(pesan) {
+    const $ = pesan._;
+    const data = (await DB.cari({ _id: $.pengirim })).hasil;
+    const lang = data.lang || 'id';
+    if ($.welcome) {
+        if (data.wlc?.[0]) {
+            let teks = data.wlc[1] || TEKS[lang]['system/welcomedefault'];
+            if (/\{mention\}/i.test(teks)) teks = teks.replace(/\{mention\}/gi, $.welcome.join(', '));
+            if (/\{gname\}/i.test(teks)) teks = teks.replace(/\{gname\}/gi, $.gname);
+            if (/\{desc\}/i.test(teks)) teks = teks.replace(/\{desc\}/gi, await groupDesc($.pengirim));
+            return kirimPesan($.pengirim, {
+                teks: [teks, TEKS[lang]['system/welcomefooter']].join('\n\n'),
+            });
+        }
+    } else if ($.leave) {
+        if (data.lev?.[0]) {
+            let teks = data.lev[1] || TEKS[lang]['system/goodbyedefault'];
+            if (/\{mention\}/i.test(teks)) teks = teks.replace(/\{mention\}/gi, $.leave.join(', '));
+            if (/\{gname\}/i.test(teks)) teks = teks.replace(/\{gname\}/gi, $.gname);
+            if (/\{desc\}/i.test(teks)) teks = teks.replace(/\{desc\}/gi, await groupDesc($.pengirim));
+            return kirimPesan($.pengirim, {
+                teks: [teks, TEKS[lang]['system/goodbyefooter']].join('\n\n'),
+            });
+        }
+    }
+}
+
 async function rss(rss) {
     if (rss.items) {
         await Promise.allSettled(
@@ -2158,7 +2185,18 @@ const Perintah = {
                 const stream = fs.createReadStream(file);
                 form.append('img', stream, { knownLength: size });
                 const res = await (await postToLolHumanAPI('wait', form)).json();
-                if (res.status != 200) throw res.message;
+                if (res.status != 200) {
+                    const res1 = await fetch();
+                    if (res1.status != 200) throw res1;
+                    res.result ||= {};
+                    const r = res1.result[0];
+                    res.result.video = r.video ? r.video + '&size=l' : undefined;
+                    res.result.similarity = (r.similarity * 100).toFixed(1) + '%';
+                    res.result.title_english = r.anilist?.title?.english || '-';
+                    res.result.title_native = r.anilist?.title?.native || '-';
+                    res.result.at = isNaN(r.from) ? '-' : Math.floor(parseInt(r.from) / 60) + ':' + (parseInt(r.from) - Math.floor(parseInt(r.from) / 60) * 60);
+                    res.result.episode = r.episode || '-';
+                }
                 return {
                     video: res.result.video ? { url: res.result.video } : undefined,
                     teks: $.TEKS('command/whatanime/result')
@@ -4038,6 +4076,80 @@ const Perintah = {
             }
         },
     },
+    setwelcome: {
+        stx: '/setwelcome',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+            if (data.c.wlc?.[0]) {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'wlc.0': 0 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setwelcome/off'), saran: ['/setwelcome'] };
+            } else {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'wlc.0': 1 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setwelcome/on'), saran: ['/setwelcometext', '/setwelcome'] };
+            }
+        },
+    },
+    setwelcometext: {
+        stx: '/setwelcometext [text]',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+            if (!$.argumen) return { teks: $.TEKS('command/setwelcometext'), saran: ['/menu bot', '/help'] };
+            if ($.argumen.toLowerCase() === 'default') {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'wlc.1': '' } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setwelcometext/donedefault'), saran: ['/setwelcome'] };
+            } else {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'wlc.1': $.argumen } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setwelcometext/done'), saran: ['/setwelcome'] };
+            }
+        },
+    },
+    setgoodbye: {
+        stx: '/setgoodbye',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+            if (data.c.lev?.[0]) {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'lev.0': 0 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setgoodbye/off'), saran: ['/setgoodbye'] };
+            } else {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'lev.0': 1 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setgoodbye/on'), saran: ['/setgoodbyetext', '/setgoodbye'] };
+            }
+        },
+    },
+    setgoodbyetext: {
+        stx: '/setgoodbyetext [text]',
+        cat: 'bot',
+        fn: async ($, data) => {
+            if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('permission/grouponly') };
+            if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+            if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+            if (!$.argumen) return { teks: $.TEKS('command/setgoodbyetext'), saran: ['/menu bot', '/help'] };
+            if ($.argumen.toLowerCase() === 'default') {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'lev.1': '' } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setgoodbyetext/donedefault'), saran: ['/setgoodbye'] };
+            } else {
+                const { _e } = await DB.perbarui({ id: data.c.id }, { $set: { 'lev.1': $.argumen } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setgoodbyetext/done'), saran: ['/setgoodbye'] };
+            }
+        },
+    },
 };
 
 function bahasa(pengirim, c, i) {
@@ -4087,6 +4199,10 @@ async function uploadGambar(file) {
     let img = await res.json();
     if (img.error) throw img.error;
     return 'https://telegra.ph' + img[0].src;
+}
+
+async function groupDesc(id) {
+    return (await IPC.kirimKueri(id.split('#')[0], { descGroup: id })).desc;
 }
 
 async function isAdmin($) {
@@ -4278,10 +4394,14 @@ function logPesan(d, pesan, bot) {
 
 process.on('message', async (pesan) => {
     IPC.terimaSinyal(pesan, (pesan) => {
-        if (pesan.hasOwnProperty('_')) {
-            if (pesan._.hasOwnProperty('pengirim')) {
-                proses(pesan);
-            } else if (pesan._?.rss) {
+        if (pesan._) {
+            if (pesan._.pengirim) {
+                if (pesan._.welcome || pesan._.leave) {
+                    greeter(pesan);
+                } else {
+                    proses(pesan);
+                }
+            } else if (pesan._.rss) {
                 rss(pesan._.rss);
             }
         }

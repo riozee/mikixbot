@@ -22,9 +22,21 @@ bot.telegram.getMe().then(({ id, username }) => {
     bot_username = username;
 });
 
-bot.on('new_chat_members', (konteks) => {});
+bot.on('new_chat_members', (konteks) => {
+    IPC.kirimSinyal('PR', {
+        pengirim: IDChat(konteks.chat.id),
+        gname: konteks.chat.title,
+        welcome: konteks.update.message.new_chat_members.map((v) => (v.username ? '@' + v.username : v.first_name)),
+    });
+});
 
-bot.on('left_chat_member', (konteks) => {});
+bot.on('left_chat_member', (konteks) => {
+    IPC.kirimSinyal('PR', {
+        pengirim: IDChat(konteks.chat.id),
+        gname: konteks.chat.title,
+        leave: [konteks.update.message.left_chat_member].map((v) => (v.username ? '@' + v.username : v.first_name)),
+    });
+});
 
 bot.on('callback_query', (konteks) => {});
 
@@ -457,6 +469,10 @@ process.on('message', (pesan) => {
                         if (admins.find((v) => String(v.user.id) === uid)?.status === 'creator') return true;
                         return false;
                     })(),
+                };
+            } else if (pesan._?.descGroup) {
+                return {
+                    desc: (await bot.telegram.getChat(ID(pesan._.descGroup))).description,
                 };
             }
         });
