@@ -5283,6 +5283,10 @@ async function isOwner($) {
 
 function saveFetchByStream(res, ext, maxSize) {
     return new Promise((resolve, reject) => {
+        if (ext === 'jpg' && /image\/jpe?g/.test(res.headers.get('content-type'))) {
+            res.body?.close?.();
+            return reject('not an image');
+        }
         if (ext === 'mp4' && res.headers.get('content-type') !== 'video/mp4') {
             res.body?.close?.();
             return reject('not a video');
