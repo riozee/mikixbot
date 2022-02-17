@@ -1139,6 +1139,7 @@ const Perintah = {
                 'reactions',
                 'bot',
                 'settings',
+                'textmaker',
             ];
             if (menus.includes(a)) return b(a);
             else {
@@ -4440,8 +4441,8 @@ const Perintah = {
             if ($.pengirim.endsWith('#C')) {
                 if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
                 if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
-                id = {id: data.c.id};
-            } else id = {_id: $.uid};
+                id = { id: data.c.id };
+            } else id = { _id: $.uid };
             if (data.c.mut) {
                 const { _e } = await DB.perbarui(id, { $unset: { mut: 1 } });
                 if (_e) throw _e;
@@ -4453,7 +4454,766 @@ const Perintah = {
             }
         },
     },
+    blackpinktext: {
+        stx: '/blackpinktext',
+        cat: 'textmaker',
+        fn: async ($, data, { command, endpoint } = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (!$.argumen) return { teks: $.TEKS('command/$textmaker1').replaceAll('$', command || 'blackpinktext') };
+            const { file } = await saveFetchByStream(await lolHumanAPI(endpoint || 'textprome/blackpink', 'text=' + encodeURI($.argumen)), 'jpg');
+            return {
+                gambar: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    neontext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'neontext', endpoint: 'textprome/neon' });
+        },
+    },
+    greenneontext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'greenneontext', endpoint: 'textprome/greenneon' });
+        },
+    },
+    futureneontext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'futureneontext', endpoint: 'textprome/futureneon' });
+        },
+    },
+    sandwritingtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'sandwritingtext', endpoint: 'textprome/sandwriting' });
+        },
+    },
+    sandsummertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'sandsummertext', endpoint: 'textprome/sandsummer' });
+        },
+    },
+    sandengravedtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'sandengravedtext', endpoint: 'textprome/sandengraved' });
+        },
+    },
+    metaldarktext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'metaldarktext', endpoint: 'textprome/metaldark' });
+        },
+    },
+    neonlighttext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'neonlighttext', endpoint: 'textprome/neonlight' });
+        },
+    },
+    holographictext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'holographictext', endpoint: 'textprome/holographic' });
+        },
+    },
+    '1917text': {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: '1917text', endpoint: 'textprome/1917text' });
+        },
+    },
+    miniontext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'miniontext', endpoint: 'textprome/minion' });
+        },
+    },
+    deluxesilvertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'deluxesilvertext', endpoint: 'textprome/deluxesilver' });
+        },
+    },
+    newyearcardtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'newyearcardtext', endpoint: 'textprome/newyearcard' });
+        },
+    },
+    bloodfrostedtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'bloodfrostedtext', endpoint: 'textprome/bloodfrosted' });
+        },
+    },
+    halloweentext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'halloweentext', endpoint: 'textprome/halloween' });
+        },
+    },
+    jokerlogotext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'jokerlogotext', endpoint: 'textprome/jokerlogo' });
+        },
+    },
+    fireworksparkletext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'fireworksparkletext', endpoint: 'textprome/fireworksparkle' });
+        },
+    },
+    natureleavestext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'natureleavestext', endpoint: 'textprome/natureleaves' });
+        },
+    },
+    bokehtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'bokehtext', endpoint: 'textprome/bokeh' });
+        },
+    },
+    toxictext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'toxictext', endpoint: 'textprome/toxic' });
+        },
+    },
+    strawberrytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'strawberrytext', endpoint: 'textprome/strawberry' });
+        },
+    },
+    box3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'box3dtext', endpoint: 'textprome/box3d' });
+        },
+    },
+    roadwarningtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'roadwarningtext', endpoint: 'textprome/roadwarning' });
+        },
+    },
+    breakwalltext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'breakwalltext', endpoint: 'textprome/breakwall' });
+        },
+    },
+    icecoldtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'icecoldtext', endpoint: 'textprome/icecold' });
+        },
+    },
+    luxurytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'luxurytext', endpoint: 'textprome/luxury' });
+        },
+    },
+    cloudtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'cloudtext', endpoint: 'textprome/cloud' });
+        },
+    },
+    summersandtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'summersandtext', endpoint: 'textprome/summersand' });
+        },
+    },
+    horrorbloodtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'horrorbloodtext', endpoint: 'textprome/horrorblood' });
+        },
+    },
+    thundertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'thundertext', endpoint: 'textprome/thunder' });
+        },
+    },
+    magmatext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'magmatext', endpoint: 'textprome/magma' });
+        },
+    },
+    impressiveglitchtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'impressiveglitchtext', endpoint: 'textprome/impressiveglitch' });
+        },
+    },
+    harrypottertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'harrypottertext', endpoint: 'textprome/harrypotter' });
+        },
+    },
+    foggywindowtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'foggywindowtext', endpoint: 'textprome/foggywindow' });
+        },
+    },
+    watercolortext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'watercolortext', endpoint: 'textprome/watercolor' });
+        },
+    },
+    wonderfulgraffititext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'wonderfulgraffititext', endpoint: 'textprome/wonderfulgraffiti' });
+        },
+    },
+    bannerloltext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'bannerloltext', endpoint: 'photooxy3/bannerlol' });
+        },
+    },
+    shadowtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'shadowtext', endpoint: 'photooxy1/shadow' });
+        },
+    },
+    cuptext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'cuptext', endpoint: 'photooxy1/cup' });
+        },
+    },
+    cup1text: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'cup1text', endpoint: 'photooxy1/cup1' });
+        },
+    },
+    romancetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'romancetext', endpoint: 'photooxy1/romance' });
+        },
+    },
+    smoketext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'smoketext', endpoint: 'photooxy1/smoke' });
+        },
+    },
+    burnpapertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'burnpapertext', endpoint: 'photooxy1/burnpaper' });
+        },
+    },
+    lovemessagetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'lovemessagetext', endpoint: 'photooxy1/lovemessage' });
+        },
+    },
+    undergrasstext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'undergrasstext', endpoint: 'photooxy1/undergrass' });
+        },
+    },
+    lovetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'lovetext', endpoint: 'photooxy1/love' });
+        },
+    },
+    coffetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'coffetext', endpoint: 'photooxy1/coffe' });
+        },
+    },
+    woodhearttext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'woodhearttext', endpoint: 'photooxy1/woodheart' });
+        },
+    },
+    woodenboardtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'woodenboardtext', endpoint: 'photooxy1/woodenboard' });
+        },
+    },
+    summer3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'summer3dtext', endpoint: 'photooxy1/summer3d' });
+        },
+    },
+    wolfmetaltext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'wolfmetaltext', endpoint: 'photooxy1/wolfmetal' });
+        },
+    },
+    nature3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'nature3dtext', endpoint: 'photooxy1/nature3d' });
+        },
+    },
+    underwatertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'underwatertext', endpoint: 'photooxy1/underwater' });
+        },
+    },
+    golderrosetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'golderrosetext', endpoint: 'photooxy1/golderrose' });
+        },
+    },
+    summernaturetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'summernaturetext', endpoint: 'photooxy1/summernature' });
+        },
+    },
+    fallleavestext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'fallleavestext', endpoint: 'photooxy1/fallleaves' });
+        },
+    },
+    flammingtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'flammingtext', endpoint: 'photooxy1/flamming' });
+        },
+    },
+    harrypottertext2: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'harrypottertext2', endpoint: 'photooxy1/harrypotter' });
+        },
+    },
+    carvedwoodtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'carvedwoodtext', endpoint: 'photooxy1/carvedwood' });
+        },
+    },
+    wetglasstext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'wetglasstext', endpoint: 'ephoto1/wetglass' });
+        },
+    },
+    multicolor3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'multicolor3dtext', endpoint: 'ephoto1/multicolor3d' });
+        },
+    },
+    watercolortext2: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'watercolortext2', endpoint: 'ephoto1/watercolor' });
+        },
+    },
+    luxurygoldtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'luxurygoldtext', endpoint: 'ephoto1/luxurygold' });
+        },
+    },
+    galaxywallpapertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'galaxywallpapertext', endpoint: 'ephoto1/galaxywallpaper' });
+        },
+    },
+    lighttexttext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'lighttexttext', endpoint: 'ephoto1/lighttext' });
+        },
+    },
+    beautifulflowertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'beautifulflowertext', endpoint: 'ephoto1/beautifulflower' });
+        },
+    },
+    puppycutetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'puppycutetext', endpoint: 'ephoto1/puppycute' });
+        },
+    },
+    royaltext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'royaltext', endpoint: 'ephoto1/royaltext' });
+        },
+    },
+    heartshapedtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'heartshapedtext', endpoint: 'ephoto1/heartshaped' });
+        },
+    },
+    birthdaycaketext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'birthdaycaketext', endpoint: 'ephoto1/birthdaycake' });
+        },
+    },
+    galaxystyletext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'galaxystyletext', endpoint: 'ephoto1/galaxystyle' });
+        },
+    },
+    hologram3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'hologram3dtext', endpoint: 'ephoto1/hologram3d' });
+        },
+    },
+    greenneontext2: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'greenneontext2', endpoint: 'ephoto1/greenneon' });
+        },
+    },
+    glossychrometext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'glossychrometext', endpoint: 'ephoto1/glossychrome' });
+        },
+    },
+    greenbushtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'greenbushtext', endpoint: 'ephoto1/greenbush' });
+        },
+    },
+    metallogotext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'metallogotext', endpoint: 'ephoto1/metallogo' });
+        },
+    },
+    noeltext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'noeltext', endpoint: 'ephoto1/noeltext' });
+        },
+    },
+    glittergoldtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'glittergoldtext', endpoint: 'ephoto1/glittergold' });
+        },
+    },
+    textcaketext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'textcaketext', endpoint: 'ephoto1/textcake' });
+        },
+    },
+    starsnighttext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'starsnighttext', endpoint: 'ephoto1/starsnight' });
+        },
+    },
+    wooden3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'wooden3dtext', endpoint: 'ephoto1/wooden3d' });
+        },
+    },
+    textbynametext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'textbynametext', endpoint: 'ephoto1/textbyname' });
+        },
+    },
+    writegalacytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'writegalacytext', endpoint: 'ephoto1/writegalacy' });
+        },
+    },
+    galaxybattext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'galaxybattext', endpoint: 'ephoto1/galaxybat' });
+        },
+    },
+    snow3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'snow3dtext', endpoint: 'ephoto1/snow3d' });
+        },
+    },
+    birthdaydaytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'birthdaydaytext', endpoint: 'ephoto1/birthdayday' });
+        },
+    },
+    goldplaybuttontext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'goldplaybuttontext', endpoint: 'ephoto1/goldplaybutton' });
+        },
+    },
+    silverplaybuttontext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'silverplaybuttontext', endpoint: 'ephoto1/silverplaybutton' });
+        },
+    },
+    freefiretext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'freefiretext', endpoint: 'ephoto1/freefire' });
+        },
+    },
+    cartoongravitytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'cartoongravitytext', endpoint: 'ephoto1/cartoongravity' });
+        },
+    },
+    anonymhackertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'anonymhackertext', endpoint: 'ephoto1/anonymhacker' });
+        },
+    },
+    mlwalltext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'mlwalltext', endpoint: 'ephoto1/mlwall' });
+        },
+    },
+    pubgmaskottext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'pubgmaskottext', endpoint: 'ephoto1/pubgmaskot' });
+        },
+    },
+    aovwalltext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'aovwalltext', endpoint: 'ephoto1/aovwall' });
+        },
+    },
+    logogamingtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'logogamingtext', endpoint: 'ephoto1/logogaming' });
+        },
+    },
+    fpslogotext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'fpslogotext', endpoint: 'ephoto1/fpslogo' });
+        },
+    },
+    avatarlolnewtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'avatarlolnewtext', endpoint: 'ephoto1/avatarlolnew' });
+        },
+    },
+    lolbannertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'lolbannertext', endpoint: 'ephoto1/lolbanner' });
+        },
+    },
+    avatardotatext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.blackpinktext.fn($, data, { command: 'avatardotatext', endpoint: 'ephoto1/avatardota' });
+        },
+    },
+    pornhubtext: {
+        stx: '/pornhubtext',
+        cat: 'textmaker',
+        fn: async ($, data, { command, endpoint } = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            const arg = $.argumen
+                .split('|')
+                .map((v) => v?.trim?.())
+                .map((v) => encodeURI(v || ''));
+            if (!$.argumen || arg.length < 2) return { teks: $.TEKS('command/$textmaker2').replaceAll('$', command || 'pornhubtext') };
+            const { file } = await saveFetchByStream(await lolHumanAPI(endpoint || 'textprome2/pornhub', 'text1=' + arg[0], 'text2=' + arg[1]), 'jpg');
+            return {
+                gambar: { file: file },
+                _limit: limit,
+            };
+        },
+    },
+    glitchtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'glitchtext', endpoint: 'textprome2/glitch' });
+        },
+    },
+    tiktoktext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'tiktoktext', endpoint: 'photooxy2/tiktok' });
+        },
+    },
+    arcade8bittext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'arcade8bittext', endpoint: 'photooxy2/arcade8bit' });
+        },
+    },
+    battlefield4text: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'battlefield4text', endpoint: 'photooxy2/battlefield4' });
+        },
+    },
+    pubgtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'pubgtext', endpoint: 'photooxy2/pubg' });
+        },
+    },
+    avengertext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'avengertext', endpoint: 'textprome2/avenger' });
+        },
+    },
+    spacetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'spacetext', endpoint: 'textprome2/space' });
+        },
+    },
+    ninjalogotext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'ninjalogotext', endpoint: 'textprome2/ninjalogo' });
+        },
+    },
+    marvelstudiotext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'marvelstudiotext', endpoint: 'textprome2/marvelstudio' });
+        },
+    },
+    lionlogotext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'lionlogotext', endpoint: 'textprome2/lionlogo' });
+        },
+    },
+    wolflogotext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'wolflogotext', endpoint: 'textprome2/wolflogo' });
+        },
+    },
+    steel3dtext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'steel3dtext', endpoint: 'textprome2/steel3d' });
+        },
+    },
+    wallgravitytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'wallgravitytext', endpoint: 'textprome2/wallgravity' });
+        },
+    },
+    coolgravitytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'coolgravitytext', endpoint: 'textprome2/coolgravity' });
+        },
+    },
+    juventusshirttext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'juventusshirttext', endpoint: 'ephoto2/juventusshirt' });
+        },
+    },
+    cutegravitytext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'cutegravitytext', endpoint: 'ephoto2/cutegravity' });
+        },
+    },
+    realvintagetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'realvintagetext', endpoint: 'ephoto2/realvintage' });
+        },
+    },
+    codwarzonetext: {
+        cat: 'textmaker',
+        fn: async ($, data) => {
+            return Perintah.pornhubtext.fn($, data, { command: 'codwarzonetext', endpoint: 'ephoto2/codwarzone' });
+        },
+    },
+    valorantbannertext: {
+        stx: '/valorantbannertext',
+        cat: 'textmaker',
+        fn: async ($, data, { command, endpoint } = {}) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            const arg = $.argumen
+                .split('|')
+                .map((v) => v?.trim?.())
+                .map((v) => encodeURI(v || ''));
+            if (!$.argumen || arg.length < 3) return { teks: $.TEKS('command/$textmaker3').replaceAll('$', command || 'valorantbannertext') };
+            const { file } = await saveFetchByStream(
+                await lolHumanAPI(endpoint || 'ephoto3/valorantbanner', 'text1=' + arg[0], 'text2=' + arg[1], 'text3=' + arg[2]),
+                'jpg'
+            );
+            return {
+                gambar: { file: file },
+                _limit: limit,
+            };
+        },
+    },
 };
+
+async function getWAGroupMembers(id) {
+    return (await IPC.kirimKueri(id.split('#')[0], { wa_participants: id })).members;
+}
 
 function isMuted(data) {
     if (data?.mut) return true;

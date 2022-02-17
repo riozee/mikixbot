@@ -61,7 +61,7 @@ function mulai() {
             const pesan = _pesan.messages[0];
             if (!pesan.message) return;
             pesan.message = pesan.message.ephemeralMessage ? pesan.message.ephemeralMessage.message : pesan.message;
-            //if (_pesan.type === 'notify') return;
+            if (_pesan.type !== 'notify') return;
             if (pesan.key?.fromMe) return;
             if (pesan.key?.remoteJid === 'status@broadcast') return;
             if (pesan.key?.id && cache.msg.find((v) => v.key.id === pesan.key?.id)) return;
@@ -579,6 +579,10 @@ process.on('message', (pesan) => {
             } else if (pesan._?.descGroup) {
                 return {
                     desc: (await bot.groupMetadata(ID(pesan._.descGroup))).desc.toString(),
+                };
+            } else if (pesan._?.wa_participants) {
+                return {
+                    members: (await bot.groupMetadata(ID(pesan._.wa_participants))).participants.map((v) => IDPengguna(v.id)),
                 };
             }
         });
