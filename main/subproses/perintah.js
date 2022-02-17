@@ -55,6 +55,7 @@ setInterval(() => fs.writeFileSync('./data/tmpdb.json', JSON.stringify(cache.dat
 async function greeter(pesan) {
     const $ = pesan._;
     const data = (await DB.cari({ _id: $.pengirim })).hasil;
+    if (isMuted(data)) return;
     const lang = data.lang || 'id';
     if ($.welcome) {
         if (data.wlc?.[0]) {
@@ -81,6 +82,8 @@ async function greeter(pesan) {
 
 async function rss(rss) {
     if (rss.items) {
+        const data = (await DB.cari({ _id: rss.c })).hasil;
+        if (isMuted(data)) return;
         await Promise.allSettled(
             rss.items.map((v) =>
                 kirimPesan(rss.c, {
@@ -140,6 +143,7 @@ async function proses(pesan) {
     }
 
     if ($.teks && (data.c || data.i)?.ares) {
+        if (isMuted(data.c)) return;
         for (const { t, r } of (data.c || data.i)?.ares) {
             if (new RegExp(`([^a-z]|^)${_.escapeRegExp(t)}([^a-z]|$)`, 'i').test($.teks)) {
                 kirimPesan($.pengirim, { teks: r, re: true, mid: $.mid });
@@ -167,6 +171,7 @@ async function proses(pesan) {
     }
     ////////// INPUT
     else if (cache.data.waiter && cache.data.waiter[$.uid] && cache.data.waiter[$.uid]._in === $.pengirim) {
+        if (isMuted(data.c)) return;
         if (cache.data.broadcast?.length) await broadcast(pesan);
         waiter($, data);
     }
@@ -176,6 +181,7 @@ async function proses(pesan) {
     }
     ////////// SIMSIMI
     else if ((cache.data.simsimi ||= {})[$.pengirim]) {
+        if (isMuted(data.c)) return;
         if (cache.data.broadcast?.length) await broadcast(pesan);
         simsimi($, data);
     }
@@ -652,6 +658,9 @@ async function perintah(pesan, data) {
     log(2, $.teks);
 
     if (Perintah.hasOwnProperty($.perintah)) {
+        if (isMuted(data.c)) {
+            if ($.perintah !== 'setmutebot') return;
+        }
         stats.cmds($.perintah);
         if (cache.data.broadcast?.length) await broadcast(pesan);
         let r;
@@ -699,6 +708,7 @@ async function perintah(pesan, data) {
             }
         }
     } else {
+        if (isMuted(data.c)) return;
         if ($.idRespon) {
             kirimPesan($.pengirim, {
                 teks: $.TEKS('system/endeddialogreply'),
@@ -1102,53 +1112,42 @@ const Perintah = {
             }
         },
     },
+    settings: {
+        stx: '/settings',
+        cat: 'bot',
+        fn: ($) => {
+            return { teks: $.TEKS('command/menu/settings') };
+        },
+    },
     menu: {
         stx: '/menu',
         cat: 'bot',
         fn: ($) => {
             const a = $.argumen.replace(/[^a-z]/gi, '').toLowerCase();
             const b = (c) => ({ teks: $.TEKS('command/menu/' + c), tg_no_remove_keyboard: true });
-            if (
-                a === 'anonymouschat' ||
-                a === 'shop' ||
-                a === 'multiaccount' ||
-                a === 'converter' ||
-                a === 'fun' ||
-                a === 'downloader' ||
-                a === 'information' ||
-                a === 'searching' ||
-                a === 'tools' ||
-                a === 'randomimage' ||
-                a === 'game' ||
-                a === 'reaction' ||
-                a === 'rss' ||
-                a === 'bot'
-            )
-                return b(a);
-            else
+            const menus = [
+                'anonymouschat',
+                'shop',
+                'multiaccount',
+                'converter',
+                'fun',
+                'downloader',
+                'information',
+                'searching',
+                'tools',
+                'games',
+                'reactions',
+                'bot',
+                'settings',
+            ];
+            if (menus.includes(a)) return b(a);
+            else {
+                const command = _.shuffle(menus.map((v) => '/menu ' + v));
                 return {
-                    teks: $.TEKS('command/menu'),
-                    saran: [
-                        '/start',
-                        '/help',
-                        ..._.shuffle([
-                            '/menu anonymouschat',
-                            '/menu shop',
-                            '/menu multiaccount',
-                            '/menu converter',
-                            '/menu fun',
-                            '/menu downloader',
-                            '/menu information',
-                            '/menu searching',
-                            '/menu tools',
-                            '/menu randomimage',
-                            '/menu game',
-                            '/menu reaction',
-                            '/menu rss',
-                            '/menu bot',
-                        ]),
-                    ],
+                    teks: $.TEKS('command/menu').replace('%menu', command.join('\n')),
+                    saran: ['/start', '/help', ...command],
                 };
+            }
         },
     },
     pricing: {
@@ -3515,7 +3514,7 @@ const Perintah = {
         stx: '/deleteRSS',
         cat: 'rss',
         lim: true,
-        fn: async ($) => {
+        fn: async ($, data) => {
             if (!cekPremium($, data)) return { teks: $.TEKS('permission/premiumonly'), saran: ['/pricing'] };
             if (!$.args[0] || isNaN(parseInt($.args[0]))) return { teks: $.TEKS('command/deleterss'), saran: ['/menu rss', '/help', '/rsslist'] };
             const idx = parseInt($.args[0]) - 1;
@@ -4433,7 +4432,33 @@ const Perintah = {
             };
         },
     },
+    setmutebot: {
+        stx: '/setmutebot',
+        cat: 'bot',
+        fn: async ($, data) => {
+            let id;
+            if ($.pengirim.endsWith('#C')) {
+                if (!(await isAdmin($))) return { teks: $.TEKS('permission/adminonly') };
+                if (!data.c) return { teks: $.TEKS('permission/registeredgrouponly'), saran: ['/registergroup', '/menu bot'] };
+                id = {id: data.c.id};
+            } else id = {_id: $.uid};
+            if (data.c.mut) {
+                const { _e } = await DB.perbarui(id, { $unset: { mut: 1 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setmutebot/off'), saran: ['/setmutebot'] };
+            } else {
+                const { _e } = await DB.perbarui(id, { $set: { mut: 1 } });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/setmutebot/on'), saran: ['/setmutebot'] };
+            }
+        },
+    },
 };
+
+function isMuted(data) {
+    if (data?.mut) return true;
+    return false;
+}
 
 function bahasa(pengirim, c, i) {
     return c?.lang || (pengirim.endsWith('#C') ? 0 : i?.lang) || 'id';

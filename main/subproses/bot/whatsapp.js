@@ -38,9 +38,12 @@ function koneksikanKeWA() {
         logger: pino({ level: 'silent' }),
         printQRInTerminal: true,
         browser: ['Miki', 'Safari', '1.0.0'],
+        version: [2, 2204, 13],
         auth: state,
     });
 }
+
+let receivedPendingNotifications = false;
 
 log(8);
 let bot = koneksikanKeWA();
@@ -53,6 +56,7 @@ function mulai() {
     }
 
     bot.ev.on('messages.upsert', async (_pesan) => {
+        if (!receivedPendingNotifications) return;
         try {
             const pesan = _pesan.messages[0];
             if (!pesan.message) return;
@@ -61,7 +65,6 @@ function mulai() {
             if (pesan.key?.fromMe) return;
             if (pesan.key?.remoteJid === 'status@broadcast') return;
             if (pesan.key?.id && cache.msg.find((v) => v.key.id === pesan.key?.id)) return;
-            if (Math.floor(Date.now() / 1000) - Number(String(pesan.messageTimestamp)) > 10) return;
 
             const uid = pesan.key?.participant || pesan.key?.remoteJid;
             const cid = pesan.key?.remoteJid;
@@ -247,8 +250,10 @@ function mulai() {
     });
 
     bot.ev.on('connection.update', async (pembaruan) => {
+        if (pembaruan.receivedPendingNotifications) receivedPendingNotifications = true;
         const { connection, lastDisconnect } = pembaruan;
         if (connection === 'close') {
+            receivedPendingNotifications = false;
             log(9, lastDisconnect);
             bot = null;
             if (lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut) {
