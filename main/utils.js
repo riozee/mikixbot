@@ -94,4 +94,4 @@ exports.jeda = (milidetik) => {
     return new Promise((res) => setTimeout(res, milidetik));
 };
 
-exports.namaFileAcak = () => `${Date.now()}#${Math.random().toString(36).slice(2)}`;
+exports.namaFileAcak = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;

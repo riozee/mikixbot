@@ -440,7 +440,7 @@ async function unduhMedia(media) {
     const tautan = (await bot.telegram.getFileLink(file_id)).href;
     const f = await fetch(tautan);
     const buffer = await f.buffer();
-    const keluaran = `./tmp/${Date.now()}#${Math.random().toString(36).slice(2)}.${eks}`;
+    const keluaran = `./tmp/${utils.namaFileAcak()}.${eks}`;
     await fsp.writeFile(keluaran, buffer);
     return keluaran;
 }

@@ -4,6 +4,7 @@ const fetch = require('node-fetch');
 const fsp = require('fs/promises');
 const fs = require('fs');
 const _ = require('lodash');
+const mimetype = require('mime-types');
 
 const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
@@ -143,7 +144,7 @@ function mulai() {
                     _.dokumen = {
                         id: `${isi.mediaKey.toString()}|${isi.directPath}|${isi.url}|document`,
                         ukuran: Number(isi.fileLength),
-                        eks: isi.fileName.split('.').reverse()[0],
+                        eks: mimetype.extension(isi.mimetype) || 'bin',
                         mimetype: isi.mimetype,
                         namaFile: isi.fileName,
                     };
@@ -531,7 +532,7 @@ async function unduhMedia(media) {
     for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
     }
-    const keluaran = `./tmp/${Date.now()}#${Math.random().toString(36).slice(2)}.${ext}`;
+    const keluaran = `./tmp/${utils.namaFileAcak()}.${ext}`;
     await fsp.writeFile(keluaran, buffer);
     return keluaran;
 }

@@ -25,6 +25,7 @@ const qrcode = require('qrcode');
 const kuromoji = require('kuromoji');
 const wanakana = require('wanakana');
 const math = require('mathjs');
+const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
 
 //////////////////// VARS
 
@@ -56,9 +57,9 @@ async function greeter(pesan) {
     const $ = pesan._;
     const data = (await DB.cari({ _id: $.pengirim })).hasil;
     if (isMuted(data)) return;
-    const lang = data.lang || 'id';
+    const lang = data?.lang || 'id';
     if ($.welcome) {
-        if (data.wlc?.[0]) {
+        if (data?.wlc?.[0]) {
             let teks = data.wlc[1] || TEKS[lang]['system/welcomedefault'];
             if (/\{mention\}/i.test(teks)) teks = teks.replace(/\{mention\}/gi, $.welcome.join(', '));
             if (/\{gname\}/i.test(teks)) teks = teks.replace(/\{gname\}/gi, $.gname);
@@ -2219,13 +2220,13 @@ const Perintah = {
                     video: res.result.video ? { url: res.result.video } : undefined,
                     teks: $.TEKS('command/whatanime/result')
                         .replace('%sim', res.result.similarity)
-                        .replace('%eng', res.result.title_english)
-                        .replace('%jp', res.result.title_native)
-                        .replace('%ro', res.result.title_romaji)
+                        .replace('%eng', res.result.title_english || '-')
+                        .replace('%jp', res.result.title_native || '-')
+                        .replace('%ro', res.result.title_romaji || '-')
                         .replace('%at', res.result.at)
                         .replace('%eps', res.result.episode),
                     _limit: limit,
-                    saran: ['/anime ' + res.result.title_english],
+                    saran: ['/anime ' + res.result.title_english || res.result.title_native || res.result.title_romaji],
                 };
             } else {
                 return {
@@ -3802,8 +3803,6 @@ const Perintah = {
         stx: '/ocr',
         cat: 'tools',
         fn: async ($, data) => {
-            const limit = cekLimit($, data);
-            if (limit.val === 0) return limit.habis;
             if ($.gambar || $.q?.gambar) {
                 const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
                 const { size } = await fsp.stat(file);
@@ -3814,7 +3813,6 @@ const Perintah = {
                 if (res.status != 200) throw res.message;
                 return {
                     teks: res.result,
-                    _limit: limit,
                 };
             } else {
                 return {
@@ -4085,8 +4083,10 @@ const Perintah = {
             const idx = parseInt($.perintah) - 1;
             if (waiter.val.res[idx]) {
                 wiki.setLang(waiter.val.lang);
+                const file = './tmp/' + utils.namaFileAcak() + '.pdf';
+                await fsp.writeFile(file, await (await fetch(await wiki.pdf(waiter.val.res[idx]))).buffer());
                 return waiter.selesai({
-                    dokumen: { url: await wiki.pdf(waiter.val.res[idx]), namaFile: waiter.val.res[idx], mimetype: 'application/pdf' },
+                    dokumen: { file: file, namaFile: waiter.val.res[idx], mimetype: 'application/pdf' },
                 });
             } else {
                 if ($.perintah === 'cancel') return waiter.selesai({ teks: $.TEKS('user/dialogcancelled').replace('%d', 'wikipedia') });
@@ -5209,7 +5209,116 @@ const Perintah = {
             };
         },
     },
+    pdftotext: {
+        stx: '/pdftotext',
+        cat: 'tools',
+        fn: async ($) => {
+            if (($.dokumen || $.q.dokumen)?.eks === 'pdf') {
+                const doc = $.dokumen || $.q.dokumen;
+                const file = (await unduh($.pengirim, doc)).file;
+                const text = await pdfToText(file);
+                if (text.length > 4096) {
+                    const file = './tmp/' + utils.namaFileAcak() + '.txt';
+                    await fsp.writeFile(file, text);
+                    return {
+                        dokumen: { file: file, namaFile: 'text.txt', mimetype: 'text/plain' },
+                    };
+                }
+                return {
+                    teks: text,
+                };
+            } else {
+                return {
+                    teks: $.TEKS('command/pdftotext/nopdf'),
+                };
+            }
+        },
+    },
+    resoomer: {
+        stx: '/resoomer [text]',
+        cat: 'tools',
+        fn: async ($) => {
+            let teks;
+            if ($.arg?.length > 1000) {
+                teks = $.arg;
+            } else if (($.dokumen || $.q.dokumen)?.eks === 'pdf') {
+                const doc = $.dokumen || $.q.dokumen;
+                const file = (await unduh($.pengirim, doc)).file;
+                teks = await pdfToText(file);
+                if (teks.length < 1000) {
+                    return {
+                        teks: $.TEKS('command/resoomer/error'),
+                    };
+                }
+            } else {
+                return {
+                    teks: $.TEKS('command/resoomer/error'),
+                };
+            }
+            const form = new FormData();
+            form.append('text', teks);
+            const res = await (await postToLolHumanAPI('resoomer', form)).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: res.result,
+            };
+        },
+    },
+    whatmusic: {
+        stx: '/whatmusic',
+        cat: 'seachengine',
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if ($.audio || $.q?.audio) {
+                const { file } = await unduh($.pengirim, $.audio || $.q?.audio);
+                const form = new FormData();
+                form.append('file', fs.createReadStream(file));
+                const res = await (await postToLolHumanAPI('musicsearch', form)).json();
+                if (res.status != 200) throw res.message;
+                return {
+                    teks: $.TEKS('command/whatmusic/result')
+                        .replace('%title', res.result.title)
+                        .replace('%album', res.result.album)
+                        .replace('%artists', res.result.artists.join(', '))
+                        .replace('%dur', Math.floor(res.result.duration / 60).toFixed(2) + ':' + (res.result.duration % 60).toFixed(2))
+                        .replace('%date', res.result.release)
+                        .replace('%genres', res.result.genres.join(', ')),
+                    _limit: limit,
+                    saran: ['/spotify ' + res.result.title],
+                };
+            } else {
+                return {
+                    teks: $.TEKS('command/whatmusic/noaudio'),
+                };
+            }
+        },
+    },
 };
+
+async function pdfToText(path) {
+    async function getPage(doc, page) {
+        try {
+            return await doc.getPage(page);
+        } catch {
+            return null;
+        }
+    }
+    const doc = await pdfjs.getDocument(path).promise;
+    let i = 1,
+        page,
+        text = [];
+    while ((page = await getPage(doc, i++)) !== null) {
+        let content = await page.getTextContent();
+        text.push(
+            content.items
+                .map((v) => v.str)
+                .filter(Boolean)
+                .join(' ')
+        );
+    }
+    return text.join('\n\n');
+}
 
 async function getWAGroupMembers(id) {
     return (await IPC.kirimKueri(id.split('#')[0], { wa_participants: id })).members;
