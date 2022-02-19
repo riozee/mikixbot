@@ -284,6 +284,7 @@ function mulai() {
         upd.forEach((u) => (u.announce ? (cache.cekizin[u.id] = 'n') : 0));
     });
     bot.ev.on('group-participants.update', (upd) => {
+        if (!receivedPendingNotifications) return;
         if (upd.participants.includes(creds.bot_wa_id)) {
             if (upd.action === 'remove') cache.cekizin[upd.id] = 'n';
         } else {

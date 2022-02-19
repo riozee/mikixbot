@@ -64,7 +64,6 @@ bot.on(['message', 'channel_post'], async (konteks) => {
             t: Date.now(),
             p: await cekIzin(cid, konteks.message.chat.type === 'channel'),
         };
-        console.log(cache.cekizin[cid]);
     }
     if (cache.cekizin[cid].p === 'n') return;
     const isChannel = konteks.message.chat.type === 'channel';

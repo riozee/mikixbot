@@ -26,6 +26,7 @@ const kuromoji = require('kuromoji');
 const wanakana = require('wanakana');
 const math = require('mathjs');
 const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+const morse = require('morse');
 
 //////////////////// VARS
 
@@ -1208,8 +1209,8 @@ const Perintah = {
             return { teks: $.TEKS('command/registergroup/done').replace('%id', id).replace('%date', new Date().toLocaleString()) };
         },
     },
-    reversetext: {
-        stx: '/reversetext [text]',
+    textreverse: {
+        stx: '/textreverse [text]',
         cat: 'tools',
         fn: ($) => {
             if ($.arg) {
@@ -1218,7 +1219,7 @@ const Perintah = {
                 };
             } else {
                 return {
-                    teks: $.TEKS('command/reversetext'),
+                    teks: $.TEKS('command/textreverse'),
                     saran: ['/menu tools', '/help'],
                 };
             }
@@ -5238,23 +5239,11 @@ const Perintah = {
         stx: '/resoomer [text]',
         cat: 'tools',
         fn: async ($) => {
-            let teks;
-            if ($.arg?.length > 1000) {
-                teks = $.arg;
-            } else if (($.dokumen || $.q.dokumen)?.eks === 'pdf') {
-                const doc = $.dokumen || $.q.dokumen;
-                const file = (await unduh($.pengirim, doc)).file;
-                teks = await pdfToText(file);
-                if (teks.length < 1000) {
-                    return {
-                        teks: $.TEKS('command/resoomer/error'),
-                    };
-                }
-            } else {
+            let teks = $.arg;
+            if (teks.length < 1000)
                 return {
-                    teks: $.TEKS('command/resoomer/error'),
+                    teks: $.TEKS('command/resoomer'),
                 };
-            }
             const form = new FormData();
             form.append('text', teks);
             const res = await (await postToLolHumanAPI('resoomer', form)).json();
@@ -5291,6 +5280,167 @@ const Perintah = {
                 return {
                     teks: $.TEKS('command/whatmusic/noaudio'),
                 };
+            }
+        },
+    },
+    caesarcipher: {
+        stx: '/caesarcipher [key] [text]',
+        cat: 'tools',
+        fn: ($) => {
+            if (!$.args[0] || !$.args[1] || isNaN(+$.args[0])) return { teks: $.TEKS('command/caesarcipher') };
+            const teks = $.argumen.replace(/^-?\d+\s+/, ''),
+                key = +$.args[0];
+            let hasil = '';
+            for (let i = 0; i < teks.length; i++) {
+                const code = teks.charCodeAt(i);
+                let shifted;
+                if (code >= 65 && code <= 90) {
+                    shifted = code + key;
+                    while (shifted > 90) {
+                        shifted = shifted - 90 + 65;
+                    }
+                    while (shifted < 65) {
+                        shifted = shifted + 90 - 65;
+                    }
+                    hasil += String.fromCharCode(shifted);
+                } else if (code >= 97 && code <= 122) {
+                    shifted = code + key;
+                    while (shifted > 122) {
+                        shifted = shifted - 122 + 97;
+                    }
+                    while (shifted < 97) {
+                        shifted = shifted + 122 - 97;
+                    }
+                    hasil += String.fromCharCode(shifted);
+                } else {
+                    hasil += teks[i];
+                }
+            }
+            return { teks: hasil };
+        },
+    },
+    morseencode: {
+        stx: '/morseencode [text]',
+        cat: 'tools',
+        fn: ($) => {
+            if (!$.arg) return { teks: $.TEKS('command/morseencode') };
+            return {
+                teks: morse.encode($.arg),
+            };
+        },
+    },
+    morsedecode: {
+        stx: '/morsedecode [text]',
+        cat: 'tools',
+
+        fn: ($) => {
+            if (!$.arg) return { teks: $.TEKS('command/morsedecode') };
+            return {
+                teks: morse.decode($.arg),
+            };
+        },
+    },
+    hangman: {
+        stx: '/hangman',
+        cat: 'games',
+        fn: async ($) => {
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            let teks;
+            if ($.bahasa === 'id') teks = await fsp.readFile('./res/indonesianwords.txt', 'utf8');
+            else teks = await fsp.readFile('./res/1000englishwords.txt', 'utf8');
+            const kata = _.sample(teks.split(/\n+/)).trim().toLowerCase();
+            const map = {};
+            kata.split('').forEach((v) => (/[a-z]/.test(v) ? (map[v] = false) : 0));
+            waiter.tambahkan($.pengirim, ['hangman'], {
+                kata: kata,
+                terjawab: map,
+                retries: 5,
+            });
+            return {
+                teks: `» "${kata
+                    .split('')
+                    .map((v) => (map[v] === false ? '_' : v))
+                    .join(' ')}"\n\n${$.TEKS('command/hangman/start')}`,
+                saran: ['/cancel'],
+            };
+        },
+        hd: (waiter, $) => {
+            if ($.teks?.length === 1) {
+                const letter = $.teks.toLowerCase();
+                if (waiter.val.terjawab[letter] === false) {
+                    if (Object.values(waiter.val.terjawab).filter((v) => !v).length === 1) {
+                        return waiter.selesai({
+                            teks: $.TEKS('command/hangman/won').replace('%a', `» "${waiter.val.kata.split('').join(' ')}"`),
+                            saran: ['/hangman'],
+                        });
+                    } else {
+                        waiter.val.terjawab[letter] = true;
+                        return waiter.belum({
+                            teks: [
+                                $.TEKS('command/hangman/correct').replace('%l', letter),
+                                `» "${waiter.val.kata
+                                    .split('')
+                                    .map((v) => (waiter.val.terjawab[v] === false ? '_' : v))
+                                    .join(' ')}"`,
+                                waiter.val.retries === 5 ? null : $.TEKS('command/hangman/' + (5 - waiter.val.retries)),
+                            ]
+                                .filter(Boolean)
+                                .join('\n\n'),
+                        });
+                    }
+                } else if (waiter.val.terjawab[letter] === true) {
+                    return waiter.belum({
+                        teks: [
+                            $.TEKS('command/hangman/alreadyguessed').replace('%l', letter),
+                            `» "${waiter.val.kata
+                                .split('')
+                                .map((v) => (waiter.val.terjawab[v] === false ? '_' : v))
+                                .join(' ')}"`,
+                            waiter.val.retries === 5 ? null : $.TEKS('command/hangman/' + (5 - waiter.val.retries)),
+                        ]
+                            .filter(Boolean)
+                            .join('\n\n'),
+                    });
+                } else if (waiter.val.terjawab[letter] === undefined) {
+                    if (/[a-z]/.test(letter)) {
+                        if (--waiter.val.retries > 0) {
+                            return waiter.belum({
+                                teks: [
+                                    $.TEKS('command/hangman/wrong').replace('%l', letter),
+                                    `» "${waiter.val.kata
+                                        .split('')
+                                        .map((v) => (waiter.val.terjawab[v] === false ? '_' : v))
+                                        .join(' ')}"`,
+                                    $.TEKS('command/hangman/' + (5 - waiter.val.retries)),
+                                ].join('\n\n'),
+                            });
+                        } else {
+                            return waiter.selesai({
+                                teks: [$.TEKS('command/hangman/lose'), `» "${waiter.val.kata.split('').join(' ')}"`, $.TEKS('command/hangman/5')].join('\n\n'),
+                                saran: ['/hangman'],
+                            });
+                        }
+                    } else {
+                        return waiter.belum({
+                            teks: $.TEKS('command/hangman/notaletter'),
+                            saran: ['/cancel'],
+                        });
+                    }
+                }
+            } else if ($.teks) {
+                if ($.perintah === 'cancel') {
+                    return waiter.selesai({
+                        teks: [$.TEKS('command/hangman/lose'), `» "${waiter.val.kata.split('').join(' ')}"`, $.TEKS('command/hangman/5')].join('\n\n'),
+                        saran: ['/hangman'],
+                    });
+                }
+                return waiter.belum({
+                    teks: $.TEKS('command/hangman/notaletter'),
+                    saran: ['/cancel'],
+                });
+            } else {
+                return waiter.notice('/cancel', 'hangman');
             }
         },
     },
