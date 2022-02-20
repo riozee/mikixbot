@@ -1143,6 +1143,7 @@ const Perintah = {
                 'bot',
                 'settings',
                 'textmaker',
+                'islamic',
             ];
             if (menus.includes(a)) return b(a);
             else {
@@ -1652,12 +1653,13 @@ const Perintah = {
         stx: '/fbvideo2 [link]',
         cat: 'downloader',
         fn: async ($, data) => {
-            return Perintah.ytaudio2.fn($, data, {
+            return await Perintah.ytaudio2.fn($, data, {
                 command: 'fbvideo2',
                 extension: 'mp4',
                 mimetype: 'video/mp4',
                 media: 'video',
                 filter: (v) => v.extension === 'mp4' && v.quality === 'hd',
+                regexlink: /^(https?:\/\/)?(www\.|m\.|web\.|mbasic\.)?(facebook|fb)\.(com|watch)/,
             });
         },
     },
@@ -4340,6 +4342,7 @@ const Perintah = {
                 const { file } = await unduh($.pengirim, $.gambar || $.q.gambar);
                 let result = await searchPic(fs.createReadStream(file), { lib: 'www' });
                 if (!result.ok) result = await searchPic(fs.createReadStream(file), { lib: 'www', forcegray: true });
+                if (!result.ok) result = await searchPic(fs.createReadStream(file), { lib: '3d' });
                 if (result.ok && result.data[1]) {
                     const res = result.data[1];
                     return {
@@ -5971,6 +5974,78 @@ const Perintah = {
             };
         },
     },
+    shortlink: {
+        stx: '/shortlink [link]',
+        cat: 'tools',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/shortlink') };
+            try {
+                new URL(/^https?:\/\//.test($.argumen) ? $.argumen : 'https://' + $.argumen);
+            } catch {
+                return { teks: $.TEKS('command/shortlink') };
+            }
+            return {
+                teks: await getShortLink($.argumen),
+            };
+        },
+    },
+    ssweb: {
+        stx: '/ssweb [link]',
+        cat: 'tools',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/ssweb') };
+            try {
+                new URL(/^https?:\/\//.test($.argumen) ? $.argumen : 'https://' + $.argumen);
+            } catch {
+                return { teks: $.TEKS('command/ssweb') };
+            }
+            const res = await lolHumanAPI('sswebfull', 'url=' + encodeURI($.argumen));
+            console.log(res.headers);
+            if (res.status != 200) throw res.status;
+            const { file } = await saveFetchByStream(res, 'jpg');
+            return { gambar: { file: file } };
+        },
+    },
+    gempa: {
+        stx: '/gempa',
+        cat: 'information',
+        fn: async () => {
+            const res = await (await lolHumanAPI('infogempa')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                gambar: res.result.map ? { url: res.result.map } : undefined,
+                teks: Object.entries(res.result)
+                    .filter((v) => v[0] !== 'map')
+                    .map((v) => '» ' + v[0] + ': ' + v[1])
+                    .join('\n'),
+            };
+        },
+    },
+    asmaulhusna: {
+        stx: '/asmaulhusna',
+        cat: 'islamic',
+        fn: async () => {
+            const res = await (await lolHumanAPI('asmaulhusna')).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: `${res.result.index}. ${res.result.latin}\n\n\t${res.result.ar}\n\n» ${res.result.id}\n» ${res.result.en}`,
+            };
+        },
+    },
+    jadwalsholat: {
+        stx: '/jadwalsholat [kota]',
+        cat: 'islamic',
+        fn: async ($) => {
+            if (!$.argumen) return { teks: $.TEKS('command/jadwalsholat') };
+            const res = await (await lolHumanAPI('sholat/' + encodeURI($.argumen))).json();
+            if (res.status != 200) throw res.message;
+            return {
+                teks: Object.entries(res.result)
+                    .map((v) => '» ' + v[0] + ': ' + v[1])
+                    .join('\n'),
+            };
+        },
+    },
 };
 
 async function pdfToText(path) {
@@ -6069,7 +6144,7 @@ async function isOwner($) {
 
 function saveFetchByStream(res, ext, maxSize) {
     return new Promise((resolve, reject) => {
-        if (ext === 'jpg' && !/image\/jpe?g/.test(res.headers.get('content-type'))) {
+        if (ext === 'jpg' && !/image\/(jpe?g|png)/.test(res.headers.get('content-type'))) {
             res.body?.close?.();
             return reject('not an image');
         }
