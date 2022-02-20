@@ -27,6 +27,7 @@ const wanakana = require('wanakana');
 const math = require('mathjs');
 const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
 const morse = require('morse');
+const translate = require('@iamtraction/google-translate');
 
 //////////////////// VARS
 
@@ -178,7 +179,7 @@ async function proses(pesan) {
         waiter($, data);
     }
     ////////// PERINTAH
-    else if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&\:.][a-zA-Z0-9]+\s*/.test($.teks)) {
+    else if ($.teks && /^[\/\-\\><+_=|~!?@#$%^&:\.][a-zA-Z0-9]+\s*/.test($.teks)) {
         perintah(pesan, data);
     }
     ////////// SIMSIMI
@@ -469,7 +470,7 @@ async function anch(pesan, data) {
                     msg.teks = $.teks;
                 } else if ($.stiker) {
                     const file = await IPC.kirimKueri('WA', { unduh: $.stiker });
-                    if ($.q.stiker.animasi) {
+                    if ($.stiker.animasi) {
                         const gif = await webp.keGif(file.file);
                         msg.video = {
                             file: gif,
@@ -625,7 +626,7 @@ function cekWaiter($) {
         hapus: () => delete cache.data.waiter[$.uid],
         notice: (cmd, d) => ({
             teks: $.TEKS('user/dialognotice').replace('%cmd', cmd).replace('%d', d),
-            saran: ['/' + cmd],
+            saran: [cmd],
         }),
         belum: (pesan) => ({
             ...pesan,
@@ -1647,6 +1648,19 @@ const Perintah = {
             }
         },
     },
+    fbvideo2: {
+        stx: '/fbvideo2 [link]',
+        cat: 'downloader',
+        fn: async ($, data) => {
+            return Perintah.ytaudio2.fn($, data, {
+                command: 'fbvideo2',
+                extension: 'mp4',
+                mimetype: 'video/mp4',
+                media: 'video',
+                filter: (v) => v.extension === 'mp4' && v.quality === 'hd',
+            });
+        },
+    },
     cerpen: {
         stx: '/cerpen',
         cat: 'fun',
@@ -1792,6 +1806,26 @@ const Perintah = {
             return {
                 gambar: { file: file },
                 _limit: limit,
+            };
+        },
+    },
+    memes: {
+        stx: '/memes',
+        cat: 'fun',
+        fn: async () => {
+            const { file } = await saveFetchByStream(await lolHumanAPI('random/meme'), 'jpg');
+            return {
+                gambar: { file: file },
+            };
+        },
+    },
+    memeindo: {
+        stx: '/memeindo',
+        cat: 'fun',
+        fn: async () => {
+            const { file } = await saveFetchByStream(await lolHumanAPI('meme/memeindo'), 'jpg');
+            return {
+                gambar: { file: file },
             };
         },
     },
@@ -4267,6 +4301,15 @@ const Perintah = {
                 };
             const teks = $.args.slice(1).join(' ');
             if (teks.length > 1096) return { teks: $.TEKS('command/tts/toolong').replace('%c', teks.length) };
+            try {
+                const res = await lolHumanAPI('gtts/' + $.args[0].toLowerCase(), 'text=' + encodeURI(teks));
+                if (res.status == 200) {
+                    const { file } = await saveFetchByStream(res, 'mp3');
+                    return {
+                        audio: { file: file },
+                    };
+                }
+            } catch {}
             const tts = gtts($.args[0].toLowerCase());
             const file = './tmp/' + utils.namaFileAcak() + '.mp3';
             return await new Promise((res) => {
@@ -4367,6 +4410,15 @@ const Perintah = {
         cat: 'tools',
         fn: async ($) => {
             if (!$.arg) return { teks: $.TEKS('command/generateqr'), saran: ['/menu tools', '/help'] };
+            try {
+                const res = await lolHumanAPI('qrcode', 'text=' + encodeURI($.arg));
+                if (res.status == 200) {
+                    const { file } = await saveFetchByStream(res, 'jpg');
+                    return {
+                        gambar: { file: file },
+                    };
+                }
+            } catch {}
             const base64 = await qrcode.toDataURL($.arg, { scale: 8 });
             const buffer = Buffer.from(base64.split(',')[1], 'base64');
             const file = './tmp/' + utils.namaFileAcak() + '.jpg';
@@ -5442,6 +5494,481 @@ const Perintah = {
             } else {
                 return waiter.notice('/cancel', 'hangman');
             }
+        },
+    },
+    tictactoe: {
+        stx: '/tictactoe [com]',
+        cat: 'games',
+        fn: async ($, data) => {
+            const waiter = cekWaiter($);
+            if (waiter.val) return waiter.tolak();
+            cache.data.tictactoe ||= {};
+            let r;
+            if ((r = Object.entries(cache.data.tictactoe).find(([r, v]) => v.in === $.pengirim && v.invite === $.uid && v.status === 'pending'))) {
+                waiter.tambahkan($.pengirim, ['tictactoe'], {
+                    room: r[0],
+                    status: 'pending',
+                });
+                cache.data.tictactoe[r[0]].players.push($.uid);
+                return {
+                    teks: $.TEKS('command/tictactoe/acceptinvite').replace('%name', r[1].byname),
+                    saran: ['/yes', '/cancel'],
+                };
+            }
+            const ai = ['c', 'com', 'comp', 'computer'].includes($.args[0]?.toLowerCase?.());
+            if (!ai) {
+                if (!$.pengirim.endsWith('#C')) return { teks: $.TEKS('command/tictactoe') };
+                if (!$.q || $.q.uid === $.uid || $.q.me) return { teks: $.TEKS('command/tictactoe') };
+                const room = Math.random().toString(36).slice(2);
+                cache.data.tictactoe[room] = {
+                    invite: $.q.uid,
+                    in: $.pengirim,
+                    players: [$.uid],
+                    status: 'pending',
+                    byname: data.i?.name || $.name,
+                    byid: $.uid,
+                };
+                waiter.tambahkan($.pengirim, ['tictactoe'], {
+                    room: room,
+                    status: 'pending',
+                });
+                return {
+                    teks: $.TEKS('command/tictactoe/waitingforenemy'),
+                    saran: ['/cancel'],
+                };
+            } else {
+                const playas = _.sample(['x', 'o']);
+                waiter.tambahkan($.pengirim, ['tictactoe'], {
+                    board: ['-', '-', '-', '-', '-', '-', '-', '-', '-'],
+                    as: playas,
+                });
+                const emojis = $.TEKS('command/tictactoe/$emojis').split('|');
+                return {
+                    teks: $.TEKS('command/tictactoe/turn')
+                        .replace('%name', data.i?.name || $.name)
+                        .replace(
+                            '%state',
+                            _.chunk(emojis.slice(1, 10), 3)
+                                .map((v) => v.join(''))
+                                .join('\n')
+                        )
+                        .replace('%as', playas === 'x' ? emojis[0] : emojis[10]),
+                    saran: ['/cancel'],
+                };
+            }
+        },
+        hd: async (waiter, $, data) => {
+            if (waiter.val.board) {
+                if ($.perintah === 'cancel') {
+                    return waiter.selesai({
+                        teks: $.TEKS('command/tictactoe/cancelled'),
+                    });
+                } else {
+                    const num = +$.teks;
+                    if (!isNaN(num) && num > 0 && num < 10) {
+                        const board = waiter.val.board;
+                        if (board[num - 1] !== '-') return waiter.belum({ teks: $.TEKS('command/tictactoe/alreadychosen') });
+                        board[num - 1] = waiter.val.as;
+                        let hasil = cek(board);
+                        let state = print(board);
+                        if (!hasil) {
+                            const botplayas = ['x', 'o'].find((v) => v !== waiter.val.as);
+                            let res, move;
+                            try {
+                                if (Math.random() > 0.25)
+                                    res = await fetch(`https://stujo-tic-tac-toe-stujo-v1.p.rapidapi.com/${board.join('').toUpperCase()}/${botplayas.toUpperCase()}`, {
+                                        method: 'GET',
+                                        headers: {
+                                            'x-rapidapi-host': 'stujo-tic-tac-toe-stujo-v1.p.rapidapi.com',
+                                            'x-rapidapi-key': creds.rapidapikey,
+                                        },
+                                    });
+                            } catch {}
+                            if (res?.status != 200) {
+                                do {
+                                    move = _.random(0, 8);
+                                } while (board[move] !== '-');
+                            } else {
+                                const json = await res.json();
+                                move = json.recommendation;
+                            }
+                            if (board[move] !== '-') {
+                                do {
+                                    move = _.random(0, 8);
+                                } while (board[move] !== '-');
+                            }
+                            board[move] = botplayas;
+                            hasil = cek(board);
+                            state = print(board);
+                        }
+                        const emojis = $.TEKS('command/tictactoe/$emojis').split('|');
+                        if (hasil) {
+                            if (hasil !== 'd') {
+                                return waiter.selesai({
+                                    teks: $.TEKS('command/tictactoe/won')
+                                        .replace('%player', hasil === 'x' ? emojis[0] : emojis[10])
+                                        .replace('%state', state),
+                                    saran: ['/tictactoe computer'],
+                                });
+                            } else
+                                return waiter.selesai({
+                                    teks: $.TEKS('command/tictactoe/draw').replace('%state', state),
+                                    saran: ['/tictactoe computer'],
+                                });
+                        } else {
+                            return waiter.belum({
+                                teks: $.TEKS('command/tictactoe/turn')
+                                    .replace('%name', data.i?.name || $.name)
+                                    .replace('%state', state)
+                                    .replace('%as', waiter.val.as === 'x' ? emojis[0] : emojis[10]),
+                                ...($.platform === 'WA' ? { saran: ['/cancel'] } : { tg_no_remove_keyboard: true }),
+                            });
+                        }
+                    } else
+                        return waiter.belum({
+                            teks: $.TEKS('command/tictactoe/notice'),
+                            ...($.platform === 'WA' ? { saran: ['/cancel'] } : { tg_no_remove_keyboard: true }),
+                        });
+                }
+            }
+
+            cache.data.tictactoe ||= {};
+            if ($.perintah === 'cancel') {
+                for (const player of cache.data.tictactoe[waiter.val.room].players) {
+                    delete cache.data.waiter[player];
+                }
+                delete cache.data.tictactoe[waiter.val.room];
+                return {
+                    teks: $.TEKS('command/tictactoe/cancelled'),
+                };
+            }
+            if (waiter.val.status === 'pending') {
+                if ($.perintah === 'yes') {
+                    if (cache.data.tictactoe[waiter.val.room].invite === $.uid) {
+                        const playas = _.shuffle(['x', 'o']);
+                        for (const player of cache.data.tictactoe[waiter.val.room].players) {
+                            delete cache.data.waiter[player].status;
+                            cache.data.tictactoe[waiter.val.room].as ||= {};
+                            cache.data.tictactoe[waiter.val.room].as[player] = playas.shift();
+                        }
+                        delete cache.data.tictactoe[waiter.val.room].status;
+                        cache.data.tictactoe[waiter.val.room].turn = $.uid;
+                        cache.data.tictactoe[waiter.val.room].board = ['-', '-', '-', '-', '-', '-', '-', '-', '-'];
+                        cache.data.tictactoe[waiter.val.room].enname = data.i?.name || $.name;
+                        cache.data.tictactoe[waiter.val.room].enid = $.uid;
+                        const emojis = $.TEKS('command/tictactoe/$emojis').split('|');
+                        return waiter.belum({
+                            teks: $.TEKS('command/tictactoe/turn')
+                                .replace('%name', data.i?.name || $.name)
+                                .replace('%state', print(cache.data.tictactoe[waiter.val.room].board))
+                                .replace('%as', cache.data.tictactoe[waiter.val.room].as[$.uid] === 'x' ? emojis[0] : emojis[10]),
+                            saran: ['/cancel'],
+                        });
+                    }
+                } else {
+                    return waiter.notice('/cancel', 'tictactoe');
+                }
+            }
+            const room = cache.data.tictactoe[waiter.val.room];
+            const num = +$.teks;
+            if (room.turn === $.uid) {
+                if (!isNaN(num) && num > 0 && num < 10) {
+                    const board = room.board;
+                    if (board[num - 1] !== '-') return waiter.belum({ teks: $.TEKS('command/tictactoe/alreadychosen') });
+                    board[num - 1] = room.as[$.uid];
+                    let hasil = cek(board);
+                    const state = print(board);
+                    if (hasil) {
+                        for (const player of room.players) {
+                            delete cache.data.waiter[player];
+                        }
+                        delete cache.data.tictactoe[waiter.val.room];
+                        if (hasil !== 'd') {
+                            const emojis = $.TEKS('command/tictactoe/$emojis').split('|');
+                            return {
+                                teks: $.TEKS('command/tictactoe/won')
+                                    .replace('%player', hasil === 'x' ? emojis[0] : emojis[10])
+                                    .replace('%state', state),
+                            };
+                        } else
+                            return {
+                                teks: $.TEKS('command/tictactoe/draw').replace('%state', state),
+                            };
+                    } else {
+                        room.turn = room.players.find((v) => v !== $.uid);
+                        const emojis = $.TEKS('command/tictactoe/$emojis').split('|');
+                        return waiter.belum({
+                            teks: $.TEKS('command/tictactoe/turn')
+                                .replace('%name', room.turn === room.byid ? room.byname : room.enname)
+                                .replace('%state', state)
+                                .replace('%as', room.as[room.turn] === 'x' ? emojis[0] : emojis[10]),
+                            ...($.platform === 'WA' ? { saran: ['/cancel'] } : { tg_no_remove_keyboard: true }),
+                        });
+                    }
+                } else
+                    return waiter.belum({
+                        teks: $.TEKS('command/tictactoe/notice'),
+                        ...($.platform === 'WA' ? { saran: ['/cancel'] } : { tg_no_remove_keyboard: true }),
+                    });
+            } else if (room.turn !== $.uid) {
+                if ($.perintah)
+                    return waiter.belum({
+                        teks: $.TEKS('command/tictactoe/notice2'),
+                        ...($.platform === 'WA' ? { saran: ['/cancel'] } : { tg_no_remove_keyboard: true }),
+                    });
+            }
+
+            function cek(s) {
+                let b = [s[0], s[1], s[2]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                b = [s[3], s[4], s[5]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                b = [s[6], s[7], s[8]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                b = [s[0], s[3], s[6]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                b = [s[1], s[4], s[7]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                b = [s[2], s[5], s[8]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                b = [s[0], s[4], s[8]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                b = [s[2], s[4], s[6]];
+                if (b.every((v) => v === 'o')) return 'o';
+                if (b.every((v) => v === 'x')) return 'x';
+                if (!s.includes('-')) return 'd';
+            }
+            function print(board) {
+                const emojis = $.TEKS('command/tictactoe/$emojis').split('|');
+                return _.chunk(
+                    board.map((v, i) => (v === '-' ? emojis[i + 1] : v === 'x' ? emojis[0] : emojis[10])),
+                    3
+                )
+                    .map((v) => v.join(''))
+                    .join('\n');
+            }
+        },
+    },
+    yugiohmaker: {
+        stx: '/yugiohmaker',
+        cat: 'fun',
+        fn: async ($, data) => {
+            const limit = cekLimit($, data);
+            if (limit.val === 0) return limit.habis;
+            if (($.gambar || $.q?.gambar) && $.argumen) {
+                const [atk, def, title, desc] = $.argumen.split('|').map((v) => v.trim());
+                if (!(atk && def && title && desc)) return { teks: $.TEKS('command/yugiohmaker') };
+                const { file } = await unduh($.pengirim, $.gambar || $.q?.gambar);
+                const form = new FormData();
+                form.append('img', fs.createReadStream(file));
+                form.append('atk', atk);
+                form.append('def', def);
+                form.append('title', title);
+                form.append('desc', desc);
+                const res = await postToLolHumanAPI('yugioh', form);
+                if (res.status != 200) throw res.status;
+                if (res.headers.get('content-type') !== 'image/webp') throw res.headers.get('content-type');
+                const _file = './tmp/' + utils.namaFileAcak() + '.png';
+                await fsp.writeFile(_file, await res.buffer());
+                const _out = await webp.kePng(_file, creds.lolHumanAPIkey);
+                return { gambar: { file: _out }, _limit: limit };
+            } else return { teks: $.TEKS('command/yugiohmaker') };
+        },
+    },
+    translate: {
+        stx: '/translate [frlang] [tolang] [text]',
+        cat: 'tools',
+        fn: async ($) => {
+            const lang = [
+                'af',
+                'sq',
+                'am',
+                'ar',
+                'hy',
+                'az',
+                'eu',
+                'be',
+                'bn',
+                'bs',
+                'bg',
+                'ca',
+                'ceb',
+                'ny',
+                'zh-cn',
+                'zh-tw',
+                'co',
+                'hr',
+                'cs',
+                'da',
+                'nl',
+                'en',
+                'eo',
+                'et',
+                'tl',
+                'fi',
+                'fr',
+                'fy',
+                'gl',
+                'ka',
+                'de',
+                'el',
+                'gu',
+                'ht',
+                'ha',
+                'haw',
+                'iw',
+                'hi',
+                'hmn',
+                'hu',
+                'is',
+                'ig',
+                'id',
+                'ga',
+                'it',
+                'ja',
+                'jw',
+                'kn',
+                'kk',
+                'km',
+                'ko',
+                'ku',
+                'ky',
+                'lo',
+                'la',
+                'lv',
+                'lt',
+                'lb',
+                'mk',
+                'mg',
+                'ms',
+                'ml',
+                'mt',
+                'mi',
+                'mr',
+                'mn',
+                'my',
+                'ne',
+                'no',
+                'ps',
+                'fa',
+                'pl',
+                'pt',
+                'pa',
+                'ro',
+                'ru',
+                'sm',
+                'gd',
+                'sr',
+                'st',
+                'sn',
+                'sd',
+                'si',
+                'sk',
+                'sl',
+                'so',
+                'es',
+                'su',
+                'sw',
+                'sv',
+                'tg',
+                'ta',
+                'te',
+                'th',
+                'tr',
+                'uk',
+                'ur',
+                'uz',
+                'vi',
+                'cy',
+                'xh',
+                'yi',
+                'yo',
+                'zu',
+            ];
+            if (!$.argumen || !lang.includes($.args[0]?.toLowerCase?.())) return { teks: $.TEKS('command/translate'), saran: ['/translatelanguages'] };
+            let dari, ke, teks;
+            if (lang.includes($.args[1]?.toLowerCase?.())) {
+                dari = $.args[0].toLowerCase();
+                ke = $.args[1].toLowerCase();
+                if ($.args[2]) teks = $.argumen.replace(new RegExp(`^${$.args[0]}\\s+${$.args[1]}\\s+`), '');
+                else teks = $.q?.teks;
+            } else {
+                dari = 'auto';
+                ke = $.args[0].toLowerCase();
+                if ($.args[1]) teks = $.argumen.replace(new RegExp(`^${$.args[0]}\\s+`), '');
+                else teks = $.q?.teks;
+            }
+            if (!teks) return { teks: $.TEKS('command/translate'), saran: ['/translatelanguages'] };
+            try {
+                let tr = await translate(teks, {
+                    from: dari,
+                    to: ke,
+                });
+                if (tr.from.language.didYouMean) {
+                    tr = await translate(teks, {
+                        from: tr.from.language.iso,
+                        to: ke,
+                    });
+                }
+                return {
+                    teks: $.TEKS('command/translate/result')
+                        .replace('%from', tr.from.language.iso.toUpperCase())
+                        .replace('%to', ke.toUpperCase())
+                        .replace('%res', tr.text),
+                };
+            } catch (e) {
+                throw e;
+            }
+        },
+    },
+    translatelanguages: {
+        stx: '/ttslanguages',
+        cat: 'tools',
+        fn: ($) => {
+            return {
+                teks: $.TEKS('command/translatelanguages'),
+            };
+        },
+    },
+    define: {
+        stx: '/define [word]',
+        cat: 'searchengine',
+        fn: async ($) => {
+            if (!$.args[0]) return { teks: $.TEKS('command/define') };
+            const res = await (await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURI($.args[0]))).json();
+            if (res.title) return { teks: $.TEKS('command/define/notfound').replace('%m', res.title) };
+            const r = res[0];
+            return {
+                teks: `${r.word.toUpperCase()}${
+                    Array.isArray(r.phonetics)
+                        ? ` ${r.phonetics
+                              .map((v) => v.text)
+                              .join('')
+                              .replaceAll('//', ',')}`
+                        : ''
+                }\n\n${r.meanings
+                    .map(
+                        (v, i) =>
+                            `${i + 1}. ${v.partOfSpeech}\n${v.definitions
+                                .map(
+                                    (v) =>
+                                        `» ${v.definition}${v.example ? `\n=> "${v.example}"` : ''}${v.synonyms?.[0] ? `\nSynonym(s): ${v.synonyms.join(', ')}` : ''}${
+                                            v.antonyms?.[0] ? `\nAntonym(s): ${v.antonyms.join(', ')}` : ''
+                                        }`
+                                )
+                                .join('\n')}`
+                    )
+                    .join('\n\n')}\n\nSource:${r.sourceUrls[0] ? '\n' + r.sourceUrls.map((v) => '» ' + v).join('\n') : ' -'}\nAudio:${
+                    r.phonetics.find((v) => v.audio) ? '\n' + r.phonetics.map((v) => '» ' + v.audio).join('\n') : ' -'
+                }`,
+            };
         },
     },
 };

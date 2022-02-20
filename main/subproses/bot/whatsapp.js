@@ -223,6 +223,7 @@ function mulai() {
                         const _isi = isi.contextInfo.quotedMessage[tipe];
                         $pesan.q = muatPesan(tipe, _isi);
                         $pesan.q.mid = isi.contextInfo.stanzaId;
+                        $pesan.q.uid = IDPengguna(isi.contextInfo.participant);
                         $pesan.q.me = isi.contextInfo.participant === creds.bot_wa_id;
                         break;
                     }
@@ -251,10 +252,10 @@ function mulai() {
     });
 
     bot.ev.on('connection.update', async (pembaruan) => {
-        if (pembaruan.receivedPendingNotifications) receivedPendingNotifications = true;
         const { connection, lastDisconnect } = pembaruan;
+        if (connection !== 'open') receivedPendingNotifications = false;
+        if (pembaruan.receivedPendingNotifications) receivedPendingNotifications = true;
         if (connection === 'close') {
-            receivedPendingNotifications = false;
             log(9, lastDisconnect);
             bot = null;
             if (lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut) {

@@ -164,6 +164,7 @@ bot.on(['message', 'channel_post'], async (konteks) => {
         pesan.q = muatPesan(konteks.message.reply_to_message);
         pesan.q.mid = konteks.message.reply_to_message.message_id;
         pesan.q.me = konteks.message.reply_to_message.from.id === bot_id;
+        pesan.q.uid = IDPengguna(konteks.message.reply_to_message.from.id);
     }
 
     if (konteks.message.reply_to_message?.from) {
