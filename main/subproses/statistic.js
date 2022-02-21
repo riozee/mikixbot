@@ -3,14 +3,12 @@ const IPC = new utils.IPC('ST', process);
 
 const fs = require('fs');
 const fsp = require('fs/promises');
-const _ = require('lodash');
 const fetch = require('node-fetch');
-const { encode } = require('punycode');
 
 const creds = JSON.parse(fs.readFileSync('./creds.json'));
 
 if (!fs.existsSync('./data/stats.json')) fs.writeFileSync('./data/stats.json', '{}');
-const data = JSON.parse(fs.readFileSync('./data/stats.json'));
+const data = JSON.parse(fs.readFileSync('./data/stats.json').toString() || '{}');
 
 setInterval(async () => {
     data.t ||= Date.now();

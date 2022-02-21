@@ -112,6 +112,11 @@ async function rss(rss) {
 
 async function proses(pesan) {
     log(1, pesan);
+
+    const system = (await DB.cari({ _id: 'system' })).hasil;
+    if (!system) await DB.buat({ _id: 'system' });
+    if (system.ban && system.ban.includes(pesan._.uid)) return;
+
     logPesan(pesan.d, pesan._);
     const c = (await DB.cari({ _id: pesan._.pengirim })).hasil;
     const u = pesan._.pengirim !== pesan._.uid ? (await DB.cari({ _id: pesan._.uid })).hasil : c;
@@ -121,8 +126,6 @@ async function proses(pesan) {
         i: u?.bindto ? (await DB.cari({ _id: u?.bindto })).hasil : null,
     };
 
-    const system = (await DB.cari({ _id: 'system' })).hasil;
-    if (!system) await DB.buat({ _id: 'system' });
     data.s = system ? system : {};
 
     const $ = pesan._;
@@ -569,22 +572,27 @@ async function validasiUser($, data) {
     let r = false;
     if (!cache.data.cdcmd) cache.data.cdcmd = {};
     const cdcmd = cache.data.cdcmd;
-    if (!cdcmd[$.uid]) cdcmd[$.uid] = 0;
+    if (!cdcmd[$.uid]) cdcmd[$.uid] = [0, 0];
     if (!data.i || data.i.premlvl === 0 || Date.now() > data.i.expiration) {
         // FREE USER
-        if (Date.now() - cdcmd[$.uid] < 5000)
-            r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5'), saran: ['/pricing'] };
+        if (Date.now() - cdcmd[$.uid][0] < 5000) {
+            if (++cdcmd[$.uid][1] === 1) r = { teks: $.TEKS('user/freeusercdcommandreached').replace('%lvl', 'Free User').replace('%dur', '5'), saran: ['/pricing'] };
+            else r = true;
+        } else cdcmd[$.uid][1] = 0;
     } else {
         if (data.i.premlvl === 1) {
             // PREMIUM LITE
-            if (Date.now() - cdcmd[$.uid] < 5000) r = { teks: $.TEKS('user/cdcommandreached').replace('%lvl', 'Premium Lite').replace('%dur', '5'), saran: ['/pricing'] };
+            if (Date.now() - cdcmd[$.uid][0] < 5000) {
+                if (++cdcmd[$.uid][1] === 1) r = { teks: $.TEKS('user/cdcommandreached').replace('%lvl', 'Premium Lite').replace('%dur', '5'), saran: ['/pricing'] };
+                else r = true;
+            } else cdcmd[$.uid][1] = 0;
         } else if (data.i.premlvl === 2) {
             // PREMIUM XTREME
         }
     }
-    cdcmd[$.uid] = Date.now();
+    cdcmd[$.uid][0] = Date.now();
     for (const id in cdcmd) {
-        if (Date.now() - cdcmd[id] > 10000) delete cdcmd[id];
+        if (Date.now() - cdcmd[id][0] > 10000) delete cdcmd[id];
     }
     return r;
 }
@@ -667,7 +675,10 @@ async function perintah(pesan, data) {
         stats.cmds($.perintah);
         if (cache.data.broadcast?.length) await broadcast(pesan);
         let r;
-        if ((r = await validasiUser($, data))) return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
+        if ((r = await validasiUser($, data))) {
+            if (typeof r === 'object') return kirimPesan($.pengirim, { ...r, re: true, mid: $.mid });
+            else return;
+        }
 
         const msg = {
             penerima: $.pengirim,
@@ -1260,7 +1271,7 @@ const Perintah = {
             const langs = Object.keys(TEKS);
             if (!$.args[0]) return { teks: $.TEKS('command/setlanguage') };
             $.args[0] = $.args[0].toLowerCase();
-            if (!langs.includes($.args[0])) return { teks: $.TEKS('command/command/setlanguage'), saran: ['/languages', '/menu bot', '/help'] };
+            if (!langs.includes($.args[0])) return { teks: $.TEKS('command/setlanguage'), saran: ['/languages', '/menu bot', '/help'] };
             const { _e } = await DB.perbarui({ _id: $.pengirim.endsWith('#C') ? $.pengirim : $.id }, { $set: { lang: $.args[0] } });
             if (_e) throw _e;
             return { teks: TEKS[$.args[0]]['command/setlanguage/done'].replace('%lang', $.args[0]) };
@@ -2932,12 +2943,19 @@ const Perintah = {
         fn: async ($) => {
             if (!$.args[0]) return { teks: $.TEKS('command/report'), saran: ['/menu bot', '/help'] };
             const error = cache.data.errors?.[$.args[0].toUpperCase()];
-            if (!error) return { teks: $.TEKS('command/report/notfound'), saran: ['/contacts admin'] };
-            const { _e } = await _kirimPesan(admin, {
-                teks: `${new Date(error.t).toLocaleString()}\n\n${error.e}\n\n${JSON.stringify(error.$, null, '    ')}`,
-            });
-            if (_e) throw _e;
-            return { teks: $.TEKS('command/report/done') };
+            if (error) {
+                const { _e } = await _kirimPesan(admin, {
+                    teks: `${new Date(error.t).toLocaleString()}\n\n${error.e}\n\nCode: ${$.args[0].toUpperCase()}\nText: ${$.teks}`,
+                });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/report/doneerror'), saran: ['/contacts admin'] };
+            } else {
+                const { _e } = await _kirimPesan(admin, {
+                    teks: `${new Date().toLocaleString()}\n\n${$.name}@${$.gname} says:\n\t${$.argumen}`,
+                });
+                if (_e) throw _e;
+                return { teks: $.TEKS('command/report/done'), saran: ['/contacts admin'] };
+            }
         },
     },
     snackvideo: {
@@ -4471,22 +4489,26 @@ const Perintah = {
         cat: 'tools',
         fn: async ($) => {
             if (!$.argumen) return { teks: $.TEKS('command/math') };
-            let hasil;
-            try {
-                hasil = math.evaluate($.argumen.split(/\n+/));
-                if (hasil.values) {
-                    const formatted = [];
-                    for (const entry of hasil.values()) {
-                        formatted.push('» ' + (entry.syntax ?? entry));
+            return await new Promise((res) => {
+                const worker = cp.fork('./main/alat/mathjs.js', [$.argumen], { timeout: 1000, silent: true, detached: true, stdio: 'ignore' });
+                worker.on('message', (hasil) => {
+                    if (hasil.h) {
+                        return res({
+                            teks: hasil.h,
+                        });
+                    } else {
+                        return res({
+                            teks: $.TEKS('command/math/error').replace('%e', hasil.e),
+                        });
                     }
-                    hasil = formatted.join('\n');
-                }
-            } catch (e) {
-                hasil = $.TEKS('command/math/error').replace('%e', String(e));
-            }
-            return {
-                teks: hasil.toString(),
-            };
+                });
+                worker.on('exit', (a, b) => {
+                    if (a === null && b === 'SIGTERM')
+                        return res({
+                            teks: $.TEKS('command/math/error').replace('%e', 'too much memory'),
+                        });
+                });
+            });
         },
     },
     setmutebot: {
@@ -6046,6 +6068,474 @@ const Perintah = {
             };
         },
     },
+    surahquran: {
+        stx: '/surahquran',
+        cat: 'islamic',
+        fn: async ($) => {
+            return {
+                teks: $.TEKS('command/surahquran'),
+            };
+        },
+    },
+    quran: {
+        stx: '/quran [surah]:[ayat]',
+        cat: 'islamic',
+        fn: async ($) => {
+            const semuaSurah = [
+                'alfatihah',
+                'albaqarah',
+                'aliimran',
+                'annisa',
+                'almaidah',
+                'alanam',
+                'alaraf',
+                'alanfal',
+                'attaubah',
+                'yunus',
+                'hud',
+                'yusuf',
+                'arrad',
+                'ibrahim',
+                'alhijr',
+                'annahl',
+                'alisra',
+                'alkahf',
+                'maryam',
+                'taha',
+                'alanbiya',
+                'alhajj',
+                'almuminun',
+                'annur',
+                'alfurqan',
+                'asysyuara',
+                'annaml',
+                'alqasas',
+                'alankabut',
+                'arrum',
+                'luqman',
+                'assajdah',
+                'alahzab',
+                'saba',
+                'fatir',
+                'yasin',
+                'assaffat',
+                'sad',
+                'azzumar',
+                'ghafir',
+                'fussilat',
+                'asysyura',
+                'azzukhruf',
+                'addukhan',
+                'aljasiyah',
+                'alahqaf',
+                'muhammad',
+                'alfath',
+                'alhujurat',
+                'qaf',
+                'azzariyat',
+                'attur',
+                'annajm',
+                'alqamar',
+                'arrahman',
+                'alwaqiah',
+                'alhadid',
+                'almujadilah',
+                'alhasyr',
+                'almumtahanah',
+                'assaff',
+                'aljumuah',
+                'almunafiqun',
+                'attagabun',
+                'attalaq',
+                'attahrim',
+                'almulk',
+                'alqalam',
+                'alhaqqah',
+                'almaarij',
+                'nuh',
+                'aljinn',
+                'almuzzammil',
+                'almuddassir',
+                'alqiyamah',
+                'alinsan',
+                'almursalat',
+                'annaba',
+                'annaziat',
+                'abasa',
+                'attakwir',
+                'alinfitar',
+                'altatfif',
+                'alinsyiqaq',
+                'alburuj',
+                'attariq',
+                'alala',
+                'algasyiyah',
+                'alfajr',
+                'albalad',
+                'asysyams',
+                'allail',
+                'adduha',
+                'alinsyirah',
+                'attin',
+                'alalaq',
+                'alqadr',
+                'albayyinah',
+                'azzalzalah',
+                'aladiyat',
+                'alqariah',
+                'attakasur',
+                'alasr',
+                'alhumazah',
+                'alfil',
+                'quraisy',
+                'almaun',
+                'alkausar',
+                'alkafirun',
+                'annasr',
+                'allahab',
+                'alikhlas',
+                'alfalaq',
+                'annas',
+            ];
+            const [surah, ayat] = $.argumen.split(':').map((v) =>
+                v
+                    .trim()
+                    .toLowerCase()
+                    .replaceAll(/[^a-z0-9]/gi, '')
+            );
+            if ((isNaN(+surah) && !semuaSurah.includes(surah)) || !(!isNaN(+surah) && +surah > 0 && +surah <= semuaSurah.length) || isNaN(+ayat))
+                return { teks: $.TEKS('command/quran') };
+            const res = await (await lolHumanAPI('quran/' + (isNaN(+surah) ? semuaSurah.findIndex((v) => v === surah) + 1 : surah))).json();
+            if (res.status != 200) throw res.message;
+            const hasil = res.result.ayat.find((v) => v.ayat === +ayat);
+            if (!hasil) return { teks: $.TEKS('command/quran') };
+            return {
+                teks: $.TEKS('command/quran/result')
+                    .replace('%surah', res.result.surah)
+                    .replace('%num', res.result.nomor)
+                    .replace('%asma', res.result.asma)
+                    .replace('%type', res.result.type)
+                    .replace('%ayat', hasil.ayat)
+                    .replace('%allayat', res.result.jumlah_ayat)
+                    .replace('%arab', hasil.arab)
+                    .replace('%transliteration', `\t${hasil.latin}`)
+                    .replace('%indonesia', `\t"${hasil.indonesia}"`),
+                saran: [
+                    res.result.ayat.find((v) => v.ayat === +ayat - 1) ? `/quran ${res.result.nomor}:${+ayat - 1}` : null,
+                    `/tafsirquran ${res.result.nomor}:${ayat}`,
+                    res.result.ayat.find((v) => v.ayat === +ayat + 1) ? `/quran ${res.result.nomor}:${+ayat + 1}` : null,
+                ].filter(Boolean),
+            };
+        },
+    },
+    quranaudio: {
+        stx: '/quranaudio [surah]:[ayat]',
+        cat: 'islamic',
+        fn: async ($) => {
+            const semuaSurah = [
+                'alfatihah',
+                'albaqarah',
+                'aliimran',
+                'annisa',
+                'almaidah',
+                'alanam',
+                'alaraf',
+                'alanfal',
+                'attaubah',
+                'yunus',
+                'hud',
+                'yusuf',
+                'arrad',
+                'ibrahim',
+                'alhijr',
+                'annahl',
+                'alisra',
+                'alkahf',
+                'maryam',
+                'taha',
+                'alanbiya',
+                'alhajj',
+                'almuminun',
+                'annur',
+                'alfurqan',
+                'asysyuara',
+                'annaml',
+                'alqasas',
+                'alankabut',
+                'arrum',
+                'luqman',
+                'assajdah',
+                'alahzab',
+                'saba',
+                'fatir',
+                'yasin',
+                'assaffat',
+                'sad',
+                'azzumar',
+                'ghafir',
+                'fussilat',
+                'asysyura',
+                'azzukhruf',
+                'addukhan',
+                'aljasiyah',
+                'alahqaf',
+                'muhammad',
+                'alfath',
+                'alhujurat',
+                'qaf',
+                'azzariyat',
+                'attur',
+                'annajm',
+                'alqamar',
+                'arrahman',
+                'alwaqiah',
+                'alhadid',
+                'almujadilah',
+                'alhasyr',
+                'almumtahanah',
+                'assaff',
+                'aljumuah',
+                'almunafiqun',
+                'attagabun',
+                'attalaq',
+                'attahrim',
+                'almulk',
+                'alqalam',
+                'alhaqqah',
+                'almaarij',
+                'nuh',
+                'aljinn',
+                'almuzzammil',
+                'almuddassir',
+                'alqiyamah',
+                'alinsan',
+                'almursalat',
+                'annaba',
+                'annaziat',
+                'abasa',
+                'attakwir',
+                'alinfitar',
+                'altatfif',
+                'alinsyiqaq',
+                'alburuj',
+                'attariq',
+                'alala',
+                'algasyiyah',
+                'alfajr',
+                'albalad',
+                'asysyams',
+                'allail',
+                'adduha',
+                'alinsyirah',
+                'attin',
+                'alalaq',
+                'alqadr',
+                'albayyinah',
+                'azzalzalah',
+                'aladiyat',
+                'alqariah',
+                'attakasur',
+                'alasr',
+                'alhumazah',
+                'alfil',
+                'quraisy',
+                'almaun',
+                'alkausar',
+                'alkafirun',
+                'annasr',
+                'allahab',
+                'alikhlas',
+                'alfalaq',
+                'annas',
+            ];
+            const [surah, ayat] = $.argumen.split(':').map((v) =>
+                v
+                    .trim()
+                    .toLowerCase()
+                    .replaceAll(/[^a-z0-9]/gi, '')
+            );
+            if ((isNaN(+surah) && !semuaSurah.includes(surah)) || !(!isNaN(+surah) && +surah > 0 && +surah <= semuaSurah.length) || (ayat && isNaN(+ayat)))
+                return { teks: $.TEKS('command/quranaudio') };
+            const nomorSurah = isNaN(+surah) ? semuaSurah.findIndex((v) => v === surah) + 1 : surah;
+            if (ayat) {
+                const _surah = JSON.parse(await fsp.readFile('./res/surahquran/' + nomorSurah + '.json'));
+                if (!_surah[nomorSurah].text[ayat]) return { teks: $.TEKS('command/quranaudio') };
+            }
+            try {
+                const { file, size } = await saveFetchByStream(
+                    await lolHumanAPI('quran/audio/' + nomorSurah + (ayat ? '/' + ayat : '')),
+                    'mp3',
+                    ukuranMaksimal.dokumen[$.platform]
+                );
+                if (size < ukuranMaksimal.audio[$.platform])
+                    return {
+                        audio: { file: file },
+                    };
+                else return { dokumen: { file: file }, mimetype: 'audio/ogg', namaFile: surah };
+            } catch (e) {
+                if (e === 'toobig') return { teks: $.TEKS('command/quranaudio/toobig') };
+                throw e;
+            }
+        },
+    },
+    tafsirquran: {
+        stx: '/tafsirquran [surah]:[ayat]',
+        cat: 'islamic',
+        fn: async ($) => {
+            const semuaSurah = [
+                'alfatihah',
+                'albaqarah',
+                'aliimran',
+                'annisa',
+                'almaidah',
+                'alanam',
+                'alaraf',
+                'alanfal',
+                'attaubah',
+                'yunus',
+                'hud',
+                'yusuf',
+                'arrad',
+                'ibrahim',
+                'alhijr',
+                'annahl',
+                'alisra',
+                'alkahf',
+                'maryam',
+                'taha',
+                'alanbiya',
+                'alhajj',
+                'almuminun',
+                'annur',
+                'alfurqan',
+                'asysyuara',
+                'annaml',
+                'alqasas',
+                'alankabut',
+                'arrum',
+                'luqman',
+                'assajdah',
+                'alahzab',
+                'saba',
+                'fatir',
+                'yasin',
+                'assaffat',
+                'sad',
+                'azzumar',
+                'ghafir',
+                'fussilat',
+                'asysyura',
+                'azzukhruf',
+                'addukhan',
+                'aljasiyah',
+                'alahqaf',
+                'muhammad',
+                'alfath',
+                'alhujurat',
+                'qaf',
+                'azzariyat',
+                'attur',
+                'annajm',
+                'alqamar',
+                'arrahman',
+                'alwaqiah',
+                'alhadid',
+                'almujadilah',
+                'alhasyr',
+                'almumtahanah',
+                'assaff',
+                'aljumuah',
+                'almunafiqun',
+                'attagabun',
+                'attalaq',
+                'attahrim',
+                'almulk',
+                'alqalam',
+                'alhaqqah',
+                'almaarij',
+                'nuh',
+                'aljinn',
+                'almuzzammil',
+                'almuddassir',
+                'alqiyamah',
+                'alinsan',
+                'almursalat',
+                'annaba',
+                'annaziat',
+                'abasa',
+                'attakwir',
+                'alinfitar',
+                'altatfif',
+                'alinsyiqaq',
+                'alburuj',
+                'attariq',
+                'alala',
+                'algasyiyah',
+                'alfajr',
+                'albalad',
+                'asysyams',
+                'allail',
+                'adduha',
+                'alinsyirah',
+                'attin',
+                'alalaq',
+                'alqadr',
+                'albayyinah',
+                'azzalzalah',
+                'aladiyat',
+                'alqariah',
+                'attakasur',
+                'alasr',
+                'alhumazah',
+                'alfil',
+                'quraisy',
+                'almaun',
+                'alkausar',
+                'alkafirun',
+                'annasr',
+                'allahab',
+                'alikhlas',
+                'alfalaq',
+                'annas',
+            ];
+            const [surah, ayat] = $.argumen.split(':').map((v) =>
+                v
+                    .trim()
+                    .toLowerCase()
+                    .replaceAll(/[^a-z0-9]/gi, '')
+            );
+            if ((isNaN(+surah) && !semuaSurah.includes(surah)) || !(!isNaN(+surah) && +surah > 0 && +surah <= semuaSurah.length) || isNaN(+ayat))
+                return { teks: $.TEKS('command/tafsirquran') };
+            const nomorSurah = isNaN(+surah) ? semuaSurah.findIndex((v) => v === surah) + 1 : surah;
+            const _surah = JSON.parse(await fsp.readFile('./res/surahquran/' + nomorSurah + '.json'));
+            if (!_surah[nomorSurah].text[ayat]) return { teks: $.TEKS('command/tafsirquran') };
+            return {
+                teks: `Tafsir Q.S ${_surah[nomorSurah].name_latin}/${nomorSurah}:${ayat}\n\n» ${_surah[nomorSurah].tafsir.id.kemenag.text[ayat]}\n\nSumber: Kementerian Agama Republik Indonesia`,
+                saran: [
+                    _surah[nomorSurah].text[+ayat - 1] ? `/quran ${nomorSurah}:${+ayat - 1}` : null,
+                    `/quran ${nomorSurah}:${ayat}`,
+                    _surah[nomorSurah].text[+ayat + 1] ? `/quran ${nomorSurah}:${+ayat + 1}` : null,
+                ].filter(Boolean),
+            };
+        },
+    },
+    setban: {
+        stx: '/setban [id]',
+        cat: 'dev',
+        fn: async ($, data) => {
+            if (!cekDev($.uid)) return;
+            if (!$.args[0]) return { teks: 'no id.' };
+            if (data.s.ban?.includes?.($.args[0])) {
+                const { _e } = await DB.perbarui({ _id: 'system' }, { $pull: { ban: $.args[0] } });
+                if (_e) throw _e;
+                return { teks: `success removed ${$.args[0]} from banned list.` };
+            } else {
+                const { _e } = await DB.perbarui({ _id: 'system' }, { $push: { ban: $.args[0] } });
+                if (_e) throw _e;
+                return { teks: `success added ${$.args[0]} to banned list.` };
+            }
+        },
+    },
 };
 
 async function pdfToText(path) {
@@ -6152,7 +6642,7 @@ function saveFetchByStream(res, ext, maxSize) {
             res.body?.close?.();
             return reject('not a video');
         }
-        if (ext === 'mp3' && !['audio/mp3', 'audio/mp4', 'audio/mpeg'].includes(res.headers.get('content-type'))) {
+        if (ext === 'mp3' && !['audio/mp3', 'audio/mp4', 'audio/mpeg', 'audio/ogg'].includes(res.headers.get('content-type'))) {
             res.body?.close?.();
             return reject('not an audio');
         }
