@@ -1,3 +1,7 @@
+# This repo is archived. This is a relic of my projects while learning programming. Feel free to inspect it if you are interested.
+This was originally my private repo. I never had any chance to finish this project, so I decided to make it a public archive.
+<b>Warning: this was intended only for Indonesian speakers.
+
 # Miki bot
 
 <img src="mikibot.svg">
@@ -27,11 +31,6 @@ Cara program ini bekerja adalah dengan menggunakan komunikasi antarproses (IPC).
 > `whatsapp.js`\
 > \
 > 😀
-
-&nbsp;
-
-> CATATAN: Utamakan menggunakan Bahasa Indonesia dalam penulisan kode.\
-> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Kenapa? Karena saya gabut.
 
 &nbsp;
 
@@ -147,4 +146,4 @@ Ada 4 operasi utama dalam mengakses database:
 ## About
 
 Start date: December 28th, 2021.\
-Launch date: Soon.
+Launch date: <s>Soon.</s> <b>Never</b>
